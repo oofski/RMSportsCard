@@ -7,7 +7,7 @@
 // normal download in a browser). Two CSVs per source: Orders and Shipping.
 // =============================================================================
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../../api.js'
 
 function money(n) {
@@ -27,19 +27,27 @@ export default function History({ currentUser }) {
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState('')
 
+  const mounted = useRef(true)
+  const toastTimer = useRef(null)
+  useEffect(() => () => {
+    mounted.current = false
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+  }, [])
+
   const flash = useCallback((msg) => {
     setToast(msg)
-    setTimeout(() => setToast(''), 2600)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => { if (mounted.current) setToast('') }, 2600)
   }, [])
 
   const load = useCallback(async () => {
     try {
       const data = await api.listSnapshots()
-      setSnapshots(Array.isArray(data) ? data : [])
+      if (mounted.current) setSnapshots(Array.isArray(data) ? data : [])
     } catch (err) {
-      setError(err.message || 'Failed to load history')
+      if (mounted.current) setError(err.message || 'Failed to load history')
     } finally {
-      setLoading(false)
+      if (mounted.current) setLoading(false)
     }
   }, [])
 
