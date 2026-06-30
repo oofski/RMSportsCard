@@ -107,6 +107,14 @@ function groupByCustomer(pages) {
   // The handle most recently established by a "To:" or breaking-slip user line.
   // Continuation pages (no own handle) attach to this.
   let currentHandle = null
+  // The slip type of the most recent HEADER-bearing page ('packing' | 'breaking').
+  // A breaking slip can span multiple physical pages, and Whatnot does NOT repeat
+  // the "Whatnot - Breaking Slip" header on the continuation pages — a continuation
+  // page may begin with "Total:", "Orders:", or a bare "__ Team" line. Such a page
+  // matches NEITHER slip header, so without this we would drop it (losing every
+  // break/team after the first page). We track the last header type so a header-less
+  // non-blank page can be attached to the SAME customer under the SAME slip bucket.
+  let currentSlip = null
 
   const ensureBlock = (handle) => {
     if (!blocks.has(handle)) {
@@ -138,6 +146,7 @@ function groupByCustomer(pages) {
       // "2/2") and we keep attaching to the current handle.
       const m = page.match(RX.TO_USERNAME)
       if (m) currentHandle = m[1]
+      currentSlip = 'packing'
       if (currentHandle) ensureBlock(currentHandle).packingPages.push({ page, pageIndex })
       return
     }
@@ -146,6 +155,7 @@ function groupByCustomer(pages) {
       // Prefer the breaking slip's OWN handle so it groups with the right
       // customer even if pages are ordered oddly; else fall back to current.
       const handle = breakingHandle(page) || currentHandle
+      currentSlip = 'breaking'
       if (handle) {
         currentHandle = handle
         ensureBlock(handle).breakingPages.push({ page, pageIndex })
@@ -153,9 +163,20 @@ function groupByCustomer(pages) {
       return
     }
 
-    // A page that is neither slip type (blank/cover/etc.) is ignored — but it
-    // does not reset currentHandle, so a stray page between "1/2" and "2/2"
-    // would not orphan the continuation.
+    // A page that matches NEITHER header. Two sub-cases:
+    //   (1) Truly blank (cover/separator/empty) -> skip; it carries no data and
+    //       must not reset currentHandle/currentSlip (a blank page between "1/2"
+    //       and "2/2" must not orphan the continuation).
+    //   (2) Non-blank -> it is a header-LESS CONTINUATION of the current slip
+    //       (most often a breaking-slip page whose "Whatnot - Breaking Slip"
+    //       header was not repeated). Attach it to the current customer under the
+    //       current slip's bucket so its breaks/teams are not dropped.
+    if (!page || !String(page).trim()) return
+    if (currentHandle && currentSlip) {
+      const block = ensureBlock(currentHandle)
+      if (currentSlip === 'breaking') block.breakingPages.push({ page, pageIndex })
+      else block.packingPages.push({ page, pageIndex })
+    }
   })
 
   return [...blocks.values()]
@@ -179,6 +200,15 @@ function parseBreakingSlip(block) {
     return breakMap.get(n)
   }
 
+  // The "current break" pointer. A breaking slip can span multiple physical
+  // pages with the "Break #N" header on one page and its "__ Team" / "Orders:"
+  // lines continuing on the NEXT page (the continuation page has no break header
+  // of its own). We therefore declare `current` OUTSIDE the per-page loop so it
+  // PERSISTS across pages within one customer's breaking slip; it is only changed
+  // by a "Break #N" header (switch) or a "Total:" line (close). Resetting it per
+  // page would drop any team that spilled onto a continuation page.
+  let current = null
+
   for (const { page } of block.breakingPages) {
     const lines = toLines(page)
 
@@ -196,8 +226,8 @@ function parseBreakingSlip(block) {
     }
 
     // Walk the page tracking the "current break" so checkbox/order lines attach
-    // to the right section.
-    let current = null
+    // to the right section. `current` carries over from the previous page (see
+    // the declaration above) so a break split across a page boundary is intact.
     for (const line of lines) {
       const bh = line.match(RX.BREAK_HEADER)
       if (bh) {

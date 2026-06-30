@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.5] - 2026-06-30
+
+### Fixed — Break Slip parsing now reads MULTI-PAGE breaking slips (the real bug)
+Tested against a real Whatnot export, the v1.5.4 fix still lost teams. Root cause,
+now fixed: **a customer's Breaking Slip spans several physical pages, and Whatnot
+does not repeat the "Whatnot - Breaking Slip" header on the continuation pages.**
+- The page grouper treated those header-less continuation pages as junk and
+  **dropped them entirely**, so every break/team after the first page vanished.
+  Now a header-less page is recognized as a continuation and attached to the
+  right customer.
+- A break whose **"Break #N" header was on one page but whose teams continued on
+  the next** lost those teams (the section pointer reset at each page boundary).
+  The pointer now carries across pages, so a split break stays whole.
+
+On the real sample this takes a customer who bought **6 cards across breaks
+1 / 4 / 5** from showing **1 team** to showing **all 6**, and restores the breaks
+(2, 4, 5) and team slots that were previously missing — the parser now reconstructs
+every customer's full per-break team list. Verified end-to-end against the actual
+export (6 customers, breaks 1/2/4/5, 14 team slots, no false collisions).
+
 ## [1.5.4] - 2026-06-30
 
 ### Fixed — USPS auto-tracking: "in transit" no longer shows as "Not Shipped"
