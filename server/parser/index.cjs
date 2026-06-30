@@ -61,6 +61,12 @@ function toPrice(raw) {
   return Number.isFinite(n) ? n : 0
 }
 
+// Detects an event-date line in either "27 June, 2026" / "June 27, 2026" or
+// "2026-06-27" form. Used to know where the address ends and the event block
+// begins. US address lines (street, "City, ST 12345") never match this.
+const DATE_LINE =
+  /\b\d{4}-\d{2}-\d{2}\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*,?\s+\d{4}\b/i
+
 // =============================================================================
 // STEP 1 — Split the flat page list into per-customer blocks, keyed by handle.
 // -----------------------------------------------------------------------------
@@ -237,47 +243,63 @@ function parsePackingSlip(block) {
     if (lines.some((l) => /^NEW$/i.test(l))) isNew = true
 
     const toIdx = lines.findIndex((l) => RX.TO_USERNAME.test(l))
+    const fromIdx = lines.findIndex((l) => /^From:/i.test(l))
 
-    // Recipient real name: first REAL_NAME-shaped line after "To:", stopping if
-    // we cross into the "From:" sender block.
-    if (realName == null && toIdx >= 0) {
-      for (let i = toIdx + 1; i < lines.length; i++) {
-        const l = lines[i]
-        if (/^From:/i.test(l)) break
-        const nm = l.match(RX.REAL_NAME)
-        if (nm) {
-          realName = nm[1].trim()
-          break
-        }
-      }
-    }
+    // Per spec §2.2 the recipient's real name and shipping address are printed
+    // AFTER the "From: rm_cardz" sender block (the seller line is "From:"; the
+    // buyer's identity follows it). So we anchor the scan at the From: line —
+    // the first proper-case line after it is the recipient's real name, and the
+    // following 1–3 lines (until an order/USPS/break/weight/NEW marker) are the
+    // address. If there is no From: line we fall back to scanning after "To:".
+    const identityStart = fromIdx >= 0 ? fromIdx + 1 : (toIdx >= 0 ? toIdx + 1 : -1)
 
-    // Address: the run of lines after the recipient real name up to the first
-    // content line that is clearly NOT address (order/USPS/break/weight/etc.).
-    if (address == null && toIdx >= 0) {
-      const addrLines = []
-      let started = false
-      for (let i = toIdx + 1; i < lines.length; i++) {
-        const l = lines[i]
-        if (/^From:/i.test(l)) break // crossed into the sender block — stop
-        if (!started) {
-          // Begin collecting on the line AFTER the recipient real name.
-          if (realName && l === realName) started = true
-          continue
+    if (identityStart >= 0) {
+      // Locate the recipient real name line on this page.
+      let nameIdx = -1
+      if (realName == null) {
+        for (let i = identityStart; i < lines.length; i++) {
+          const l = lines[i]
+          // Stop if we hit order/shipping content before finding a name.
+          if (RX.ORDER_ID.test(l) || RX.USPS_LINE.test(l) || RX.BREAK_NUMBER.test(l)) break
+          const nm = l.match(RX.REAL_NAME)
+          if (nm) {
+            realName = nm[1].trim()
+            nameIdx = i
+            break
+          }
         }
-        if (
-          RX.ORDER_ID.test(l) ||
-          RX.USPS_LINE.test(l) ||
-          RX.BREAK_NUMBER.test(l) ||
-          RX.WEIGHT_LINE.test(l) ||
-          RX.GIVEAWAY_FLAG.test(l) ||
-          /^NEW$/i.test(l)
-        ) {
-          break
-        }
-        addrLines.push(l)
+      } else {
+        nameIdx = lines.indexOf(realName, identityStart)
       }
-      if (addrLines.length) address = addrLines.join(', ')
+
+      // Address: the run of lines immediately after the recipient real name up
+      // to the first line that is clearly NOT address. The address is "1–3 lines"
+      // (spec §2.2); after it comes the event name + date, so we also stop at a
+      // line carrying a price ($) or a date (which begins the event block), and
+      // hard-cap at 3 lines so a stray event title never bleeds into the address.
+      if (address == null && nameIdx >= 0) {
+        const addrLines = []
+        for (let i = nameIdx + 1; i < lines.length; i++) {
+          if (addrLines.length >= 3) break
+          const l = lines[i]
+          if (
+            RX.ORDER_ID.test(l) ||
+            RX.USPS_LINE.test(l) ||
+            RX.BREAK_NUMBER.test(l) ||
+            RX.WEIGHT_LINE.test(l) ||
+            RX.GIVEAWAY_FLAG.test(l) ||
+            /^NEW$/i.test(l) ||
+            RX.TO_USERNAME.test(l) ||
+            /^From:/i.test(l) ||
+            /\$[0-9]/.test(l) ||
+            DATE_LINE.test(l)
+          ) {
+            break
+          }
+          addrLines.push(l)
+        }
+        if (addrLines.length) address = addrLines.join(', ')
+      }
     }
 
     // Per-order lines: each "Order <id>" line carries a product whose attributes
@@ -288,7 +310,11 @@ function parsePackingSlip(block) {
       if (!om) continue
       const orderId = om[1]
 
-      const windowLines = lines.slice(i, i + 6)
+      // Scope this order's attributes to the lines up to the NEXT "Order <id>"
+      // line (capped), so a following order's GIVEAWAY/price can't bleed in.
+      let end = i + 1
+      while (end < lines.length && end < i + 8 && !RX.ORDER_ID.test(lines[end])) end++
+      const windowLines = lines.slice(i, end)
       const windowText = windowLines.join(' ')
 
       let breakNumber = null
