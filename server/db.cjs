@@ -599,15 +599,33 @@ class Db {
       eventDate: s.meta.event.date,
       breaksPerEvent: s.meta.breaksPerEvent,
       hasData: this.hasData(),
+      // USPS auto-tracking config. The raw key is never returned to the UI —
+      // only whether one is set — but the provider choice is.
+      trackingProvider: s.meta.trackingProvider || 'scrape', // 'scrape' | '17track'
+      trackingKeySet: !!s.meta.trackingApiKey,
     }
   }
 
-  updateSettings({ eventName, breaksPerEvent }) {
+  updateSettings({ eventName, breaksPerEvent, trackingProvider, trackingApiKey }) {
     const s = this.store.state
     if (eventName !== undefined) s.meta.event.name = eventName
     if (breaksPerEvent !== undefined) s.meta.breaksPerEvent = Number(breaksPerEvent) || 9
+    if (trackingProvider !== undefined && ['scrape', '17track'].includes(trackingProvider)) {
+      s.meta.trackingProvider = trackingProvider
+    }
+    // Empty string clears the key; undefined leaves it untouched.
+    if (trackingApiKey !== undefined) s.meta.trackingApiKey = trackingApiKey ? String(trackingApiKey).trim() : null
     this.store.saveNow()
     return this.getSettings()
+  }
+
+  /** Tracking provider + key for the Electron main process to choose a source. */
+  getTrackingConfig() {
+    const s = this.store.state
+    return {
+      provider: s.meta.trackingProvider || 'scrape',
+      apiKey: s.meta.trackingApiKey || null,
+    }
   }
 }
 

@@ -209,8 +209,23 @@ export default function ShippingTracker({ currentUser }) {
     setTracking({ done: 0, total: shipments.length })
     try {
       const res = await api.refreshTracking()
-      if (res && res.error) setActionError(res.error)
-      else showToast(`USPS check complete — ${res.updated} updated of ${res.scanned} scanned`)
+      if (res && res.error) {
+        setActionError(res.error)
+      } else if (res) {
+        // Honest reporting: distinguish updated / read / blocked / unreadable.
+        const read = res.read != null ? res.read : (res.updated || 0)
+        const blocked = res.blocked || 0
+        const failed = res.failed || 0
+        let msg = `Updated ${res.updated || 0} · read ${read}/${res.scanned || 0}`
+        if (blocked) msg += ` · ${blocked} blocked`
+        if (failed) msg += ` · ${failed} unreadable`
+        showToast(msg)
+        if (read === 0 && (res.scanned || 0) > 0) {
+          setActionError(res.provider === '17track'
+            ? 'No statuses could be read — check your 17TRACK API key in Settings.'
+            : 'USPS blocked the automatic check (no statuses read). Add a free 17TRACK key in Settings for reliable status, or set statuses manually below.')
+        }
+      }
       const fresh = await api.getShipments()
       setShipments(Array.isArray(fresh) ? fresh : [])
     } catch (err) {

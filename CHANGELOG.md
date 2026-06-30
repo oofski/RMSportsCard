@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-30
+
+### Fixed / Added — USPS auto-tracking (it now actually works)
+A multi-agent analysis found the old auto-tracking failed because the keyless
+USPS scrape hit Akamai's bot wall and silently reported "0 updated." Rework:
+- **Pluggable tracking provider** (Settings → "USPS auto-tracking"):
+  - **17TRACK API (recommended, reliable):** paste a free Access Key and the app
+    uses structured statuses by tracking number — no scraping, no Mailer ID.
+  - **Auto-read from USPS (default, no key):** a hardened best-effort scraper —
+    one reused window with a persistent warmed session, usps.com warm-up,
+    consistent UA + Accept-Language, sequential + jittered requests, status-banner
+    selector-polling, and explicit Akamai challenge detection (stops early instead
+    of hammering).
+- **Honest results:** the refresh now reports "Updated X · read Y/N · Z blocked"
+  instead of a fake "0 updated"; reading 0 statuses points you to add a 17TRACK key.
+- See `docs/USPS_TRACKING.md` for the full analysis, options, and plan.
+
 ## [1.4.0] - 2026-06-30
 
 ### Added

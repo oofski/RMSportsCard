@@ -18,7 +18,8 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('node:path')
 const { startServer } = require('../server/index.cjs')
 const { initAutoUpdate, checkForUpdatesManually, quitAndInstall } = require('./updater.cjs')
-const { refreshTracking } = require('./tracking.cjs')
+const { scrapeTracking } = require('./tracking.cjs')
+const { fetch17TrackStatuses } = require('../server/tracking17.cjs')
 
 // True when launched via `npm run dev` (renderer served by Vite on :5173).
 const isDev = process.env.RMCARDZ_DEV === '1'
@@ -101,20 +102,35 @@ ipcMain.handle('app-version', () => app.getVersion())
 ipcMain.handle('updates:check', () => checkForUpdatesManually())
 ipcMain.handle('updates:install', () => quitAndInstall())
 
-// Automatic USPS status refresh: scrape every shipment's tracking page in a
-// hidden window and write back any changed statuses (setBy='auto'). Progress is
-// streamed to the renderer so it can show a "12 / 112" indicator.
+// Automatic USPS status refresh. Picks the configured provider:
+//   - '17track' (+ key): reliable API lookups (no scraping)
+//   - 'scrape' (default): best-effort hidden-window scrape of USPS
+// Writes back changed statuses and returns HONEST stats so the UI can tell
+// "updated" from "couldn't read / blocked" (the old code always said "0 updated").
 ipcMain.handle('tracking:refresh', async () => {
   if (!backend || !backend.db) return { error: 'Backend not ready', updated: 0, scanned: 0 }
   const shipments = backend.db.listShipments()
-  const map = await refreshTracking({
-    shipments,
-    onProgress: (p) => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
-    },
-  })
-  const result = backend.db.bulkSetShipmentStatusByTracking(map, { by: 'auto' })
-  return { ...result, scanned: shipments.length }
+  const cfg = backend.db.getTrackingConfig() // { provider, apiKey }
+  const onProgress = (p) => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
+  }
+
+  let result
+  try {
+    if (cfg.provider === '17track' && cfg.apiKey) {
+      result = await fetch17TrackStatuses({ shipments, onProgress, apiKey: cfg.apiKey })
+    } else {
+      result = await scrapeTracking({ shipments, onProgress })
+    }
+  } catch (err) {
+    return { error: String(err && err.message ? err.message : err), provider: cfg.provider, updated: 0, scanned: shipments.length }
+  }
+
+  const map = (result && result.map) || {}
+  const stats = (result && result.stats) || { scanned: shipments.length, read: 0, blocked: 0, failed: 0 }
+  const by = cfg.provider === '17track' ? '17track' : 'usps'
+  const upd = backend.db.bulkSetShipmentStatusByTracking(map, { by })
+  return { provider: cfg.provider, updated: upd.updated, ...stats }
 })
 
 // -----------------------------------------------------------------------------

@@ -26,6 +26,11 @@ export default function SettingsModal({ onClose, onChanged }) {
   const [eventDate, setEventDate] = useState('') // read-only, from import
   const [hasData, setHasData] = useState(false) // read-only, from import
 
+  // --- USPS auto-tracking provider ----------------------------------------
+  const [trackingProvider, setTrackingProvider] = useState('scrape') // 'scrape' | '17track'
+  const [trackingApiKey, setTrackingApiKey] = useState('') // only sent if non-empty
+  const [trackingKeySet, setTrackingKeySet] = useState(false) // a key is already stored
+
   // --- Lifecycle / status state -------------------------------------------
   const [loading, setLoading] = useState(true) // initial getSettings in flight
   const [saving, setSaving] = useState(false) // updateSettings in flight
@@ -51,6 +56,8 @@ export default function SettingsModal({ onClose, onChanged }) {
         )
         setEventDate(s.eventDate || '')
         setHasData(!!s.hasData)
+        setTrackingProvider(s.trackingProvider || 'scrape')
+        setTrackingKeySet(!!s.trackingKeySet)
       } catch (err) {
         if (active) setError(err.message || 'Could not load settings.')
       } finally {
@@ -81,10 +88,15 @@ export default function SettingsModal({ onClose, onChanged }) {
     setError(null)
     try {
       const count = Number(breaksPerEvent)
-      await api.updateSettings({
+      const payload = {
         eventName: eventName.trim(),
         breaksPerEvent: Number.isFinite(count) && count > 0 ? count : DEFAULT_BREAKS_PER_EVENT,
-      })
+        trackingProvider,
+      }
+      // Only send the key when the user actually typed one, so leaving the field
+      // blank never wipes a previously-saved key.
+      if (trackingApiKey.trim()) payload.trackingApiKey = trackingApiKey.trim()
+      await api.updateSettings(payload)
       onChanged()
       onClose()
     } catch (err) {
@@ -163,6 +175,41 @@ export default function SettingsModal({ onClose, onChanged }) {
                 {hasData ? 'yes' : 'no'}
               </span>
             </div>
+
+            {/* ---- USPS auto-tracking provider --------------------------- */}
+            <div className="section-title">USPS auto-tracking</div>
+            <label className="field">
+              <span>Status source</span>
+              <select
+                className="select"
+                value={trackingProvider}
+                onChange={(e) => setTrackingProvider(e.target.value)}
+              >
+                <option value="scrape">Auto-read from USPS (no key, best-effort)</option>
+                <option value="17track">17TRACK API (reliable — free key)</option>
+              </select>
+            </label>
+            {trackingProvider === '17track' && (
+              <label className="field">
+                <span>
+                  17TRACK API key{' '}
+                  {trackingKeySet && <span className="muted small">(saved — leave blank to keep it)</span>}
+                </span>
+                <input
+                  className="input"
+                  type="password"
+                  value={trackingApiKey}
+                  onChange={(e) => setTrackingApiKey(e.target.value)}
+                  placeholder={trackingKeySet ? '•••••••• (saved)' : 'Paste your 17TRACK Access Key'}
+                  autoComplete="off"
+                />
+              </label>
+            )}
+            <p className="muted small" style={{ marginTop: -4 }}>
+              {trackingProvider === '17track'
+                ? 'Free key at features.17track.net → Settings → Security → Access Key (free for 100 numbers/month). Reliable structured status — no scraping.'
+                : 'Reads each package’s status from the USPS website. Free and keyless, but USPS may block automated checks. If a refresh reads 0 statuses, switch to 17TRACK above.'}
+            </p>
 
             {/* ---- Desktop: version + update check ----------------------- */}
             {desktop && (
