@@ -55,7 +55,6 @@ button { font-family: inherit; }
 
 /* ---- Layout ------------------------------------------------------------- */
 .app { display: flex; flex-direction: column; height: 100%; }
-.app-body { flex: 1; overflow: auto; padding: 24px; }
 .container { max-width: 1200px; margin: 0 auto; }
 .center-screen { display: flex; align-items: center; justify-content: center; min-height: 100%; padding: 24px; }
 .row { display: flex; align-items: center; gap: 12px; }
@@ -69,20 +68,9 @@ button { font-family: inherit; }
 .hidden { display: none; }
 
 /* ---- Top bar ------------------------------------------------------------ */
-.topbar {
-  display: flex; align-items: center; gap: 16px;
-  padding: 12px 20px; background: var(--bg-2);
-  border-bottom: 1px solid var(--line);
-}
+/* Brand mark (used by the sidebar header). */
 .brand { font-weight: 800; letter-spacing: 0.5px; font-size: 18px; }
 .brand .dot { color: var(--accent); }
-.tabs { display: flex; gap: 6px; }
-.tab {
-  padding: 9px 16px; border-radius: 8px; cursor: pointer; border: 1px solid transparent;
-  background: transparent; color: var(--text-dim); font-weight: 600;
-}
-.tab:hover { color: var(--text); background: var(--bg-3); }
-.tab.active { color: var(--text); background: var(--bg-3); border-color: var(--accent); }
 
 /* ---- Buttons ------------------------------------------------------------ */
 .btn {
