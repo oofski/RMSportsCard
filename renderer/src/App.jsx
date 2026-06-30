@@ -17,14 +17,13 @@ import Login from './components/Login.jsx'
 import SideBar from './components/SideBar.jsx'
 import UpdateBanner from './components/UpdateBanner.jsx'
 import Upload from './components/Upload.jsx'
-import Dashboard from './components/Dashboard.jsx'
-import OrderTracking from './components/orders/OrderTracking.jsx'
 import OrderQueue from './components/orders/OrderQueue.jsx'
 import BreakChecklist from './components/checklist/BreakChecklist.jsx'
 import ShippingTracker from './components/shipping/ShippingTracker.jsx'
-import WhatnotOrders from './components/whatnot/WhatnotOrders.jsx'
 import SalesDashboard from './components/whatnot/SalesDashboard.jsx'
 import History from './components/history/History.jsx'
+// Archived (kept on disk, no longer linked in the nav): Dashboard (Overview),
+// OrderTracking, WhatnotOrders.
 import SettingsModal from './components/SettingsModal.jsx'
 import UserManager from './components/UserManager.jsx'
 
@@ -33,7 +32,7 @@ export default function App() {
   const [needsBootstrap, setNeedsBootstrap] = useState(false)
   const [user, setUser] = useState(null)
   const [hasData, setHasData] = useState(false)
-  const [tab, setTab] = useState('tracking') // tracking | planner | checker | shipping | whatnot | sales | overview
+  const [tab, setTab] = useState('orders') // orders | checker | shipping | sales | history
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [appVersion, setAppVersion] = useState('1.0.0')
@@ -169,12 +168,9 @@ export default function App() {
         />
         <main className="app-main">
           <div className="container">
-            {tab === 'overview' && <Dashboard onGoTo={setTab} />}
-            {tab === 'tracking' && <OrderTracking currentUser={user} />}
-            {tab === 'planner' && <OrderQueue currentUser={user} />}
+            {tab === 'orders' && <OrderQueue currentUser={user} />}
             {tab === 'checker' && <BreakChecklist currentUser={user} />}
             {tab === 'shipping' && <ShippingTracker currentUser={user} />}
-            {tab === 'whatnot' && <WhatnotOrders currentUser={user} />}
             {tab === 'sales' && <SalesDashboard currentUser={user} />}
             {tab === 'history' && <History currentUser={user} />}
           </div>

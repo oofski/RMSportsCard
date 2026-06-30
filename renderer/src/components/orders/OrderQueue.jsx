@@ -216,7 +216,7 @@ export default function OrderQueue({ currentUser }) {
     <div className="col" style={{ gap: 14 }}>
       {/* Toolbar */}
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>📋 Planner — Order Queue</h2>
+        <h2 style={{ margin: 0 }}>📦 Orders</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn-sm btn-ghost" onClick={resetQueue} title="Reset the manual queue order back to default">
             ↩︎ Reset queue
@@ -264,71 +264,84 @@ export default function OrderQueue({ currentUser }) {
         const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
         return (
           <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${isExpanded ? 'open' : ''}`}>
-            <div className="order-row-main">
-              {/* Single status pill (replaces the 4-chip stepper) */}
-              <span className="order-status-pill" style={{ background: sd.color || 'var(--bg-3)' }}>
+            {/* Collapsed row — tap anywhere to drop down the team checklist. */}
+            <div className="order-row-main" role="button" tabIndex={0} onClick={() => toggleExpand(o.id)}>
+              <span
+                className="order-status-pill"
+                style={{ '--pill': sd.color || '#9ca3af' }}
+                onClick={(e) => e.stopPropagation()}
+              >
                 {sd.emoji} {sd.label || o.stage}
               </span>
 
-              {/* Customer */}
               <div className="order-row-id">
                 <strong>{o.customer.realName}</strong>
                 <span className="muted small">@{o.customer.handle}</span>
                 {o.customer.isNew && <span className="badge amber">NEW</span>}
-                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>⏸{o.heldReason ? ` ${o.heldReason}` : ''}</span>}
+                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>⏸</span>}
               </div>
 
-              {/* At-a-glance meta: breaks · slim pick bar · picked · tracking */}
+              {/* Slim at-a-glance: pick progress only (details live in the drop-down). */}
               <div className="order-row-meta small muted">
-                <span>{o.breakCount} break{o.breakCount === 1 ? '' : 's'}</span>
+                {o.breakCount > 1 && <span className="nowrap">{o.breakCount} breaks</span>}
                 <span className="bar bar-inline"><span className={pct >= 100 ? 'good' : ''} style={{ width: pct + '%' }} /></span>
                 <span className="mono">{o.pick.checked}/{o.pick.total}</span>
-                {o.trackingNumber && <span className="mono" title={o.trackingNumber}>{o.trackingNumber.slice(0, 4)}…{o.trackingNumber.slice(-4)}</span>}
               </div>
 
-              {/* One primary action + a compact any-stage select + expander */}
-              <div className="order-row-actions">
+              {/* One primary action + expander. (Stage-set moved into the drop-down.) */}
+              <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
                 {!sd.terminal && (
                   <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title={`Mark done → ${(stageByCode[nextStageCode(o.stage)] || {}).label}`}>
-                    ✓ Done →
+                    ✓ Done
                   </button>
                 )}
-                <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Order stage" title="Set stage">
-                  {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.emoji} {s.label}</option>)}
-                </select>
-                <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} title={isExpanded ? 'Hide details' : 'Show details'}>
+                <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} aria-label={isExpanded ? 'Hide teams' : 'Show teams'}>
                   {isExpanded ? '▾' : '▸'}
                 </button>
               </div>
             </div>
 
-            {/* Expanded detail: secondary actions + per-team pick checkboxes */}
+            {/* Drop-down: per-break team CHECKLIST + tucked secondary actions. */}
             {isExpanded && (
               <div className="order-row-detail">
-                <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
+                {o.breaks.map((b) => {
+                  const done = b.teams.filter((t) => t.checkedOff).length
+                  const complete = b.teams.length > 0 && done >= b.teams.length
+                  return (
+                    <div key={b.breakNumber} className="break-group">
+                      <div className="bk">
+                        <span>Break #{b.breakNumber}</span>
+                        <span className="mono small" style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
+                      </div>
+                      <div className="row" style={{ flexWrap: 'wrap' }}>
+                        {b.teams.map((t) => (
+                          <span
+                            key={t.slotId}
+                            className={`team-chip ${t.checkedOff ? 'checked' : ''}`}
+                            onClick={() => toggleTeam(o, t)}
+                            title={t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}
+                          >
+                            {t.checkedOff ? '✓' : '☐'} {t.teamName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Secondary actions tucked below a hairline so they recede. */}
+                <div className="order-detail-actions">
+                  {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
+                  <span className="spacer" />
                   <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? '▶ Resume' : '⏸ Hold'}</button>
                   <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filter/search to reorder'}>↑</button>
                   <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === visible.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filter/search to reorder'}>↓</button>
                   {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)}>🌐 USPS</button>}
+                  <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Set status" title="Set status">
+                    {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.emoji} {s.label}</option>)}
+                  </select>
                 </div>
-                {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
-                {o.breaks.map((b) => (
-                  <div key={b.breakNumber} className="break-group">
-                    <div className="bk">Break #{b.breakNumber}</div>
-                    <div className="row" style={{ flexWrap: 'wrap' }}>
-                      {b.teams.map((t) => (
-                        <span
-                          key={t.slotId}
-                          className={`team-chip ${t.checkedOff ? 'checked' : ''}`}
-                          onClick={() => toggleTeam(o, t)}
-                          title={t.checkedOff ? 'Picked — click to uncheck' : 'Click when this card is pulled'}
-                        >
-                          {t.checkedOff ? '✓' : '☐'} {t.teamName}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
               </div>
             )}
           </div>

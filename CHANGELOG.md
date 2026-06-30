@@ -6,7 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.5.1] - 2026-06-30
+## [1.5.2] - 2026-06-30
+
+### Changed — streamlined, less clunky
+- **Merged Order Tracking + Order Manager into one "Orders" tab.** Each order is
+  a clean row (customer + status); **tap it to drop down the teams as a
+  click-to-check packing checklist** (grouped by break, with per-break progress).
+  Secondary actions (hold, reorder, USPS, set-status) are tucked into the
+  drop-down instead of cluttering the row.
+- **Fewer tabs:** Orders · Checker · Shipping Tracker · Sales Dashboard · History.
+  Archived the **Whatnot Orders** and **Overview** tabs from the nav (their data
+  still lives in Sales Dashboard and History/CSV).
+- **Visual polish:** softer card shadows, roomier spacing, larger team checkboxes
+  with a positive green "packed" state (no more strike-through), and calmer,
+  legible status pills (a tint of the stage color) in both light and dark.
 
 ### Added
 - New **History** tab: save a dated snapshot of the current event's order +

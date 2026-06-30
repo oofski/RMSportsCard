@@ -15,14 +15,11 @@ import React from 'react'
 // Nav model — split icon/label so the collapsed rail can render icons only.
 // NOTE: keys must stay stable; Dashboard.onGoTo() navigates by these keys.
 const NAV = [
-  { key: 'tracking', icon: '📋', label: 'Order Tracking' },
-  { key: 'planner', icon: '🗂', label: 'Order Manager' },
+  { key: 'orders', icon: '📦', label: 'Orders' },
   { key: 'checker', icon: '✅', label: 'Checker' },
   { key: 'shipping', icon: '🚚', label: 'Shipping Tracker' },
-  { key: 'whatnot', icon: '🧾', label: 'Whatnot Orders' },
   { key: 'sales', icon: '💰', label: 'Sales Dashboard' },
   { key: 'history', icon: '🗄', label: 'History' },
-  { key: 'overview', icon: '📊', label: 'Overview' },
 ]
 
 export default function SideBar({
