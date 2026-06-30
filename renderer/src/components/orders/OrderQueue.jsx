@@ -284,6 +284,11 @@ export default function OrderQueue({ currentUser }) {
                 <strong>{o.customer.realName}</strong>
                 <span className="muted small">@{o.customer.handle}</span>
                 {o.customer.isNew && <span className="badge amber">NEW</span>}
+                {o.multiCard && (
+                  <span className="badge red" title={`Multiple cards (${o.cardCount}) across this order — double-check every card is packed`}>
+                    ⚠️ {o.cardCount} cards
+                  </span>
+                )}
                 {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>⏸</span>}
               </div>
 

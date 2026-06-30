@@ -33,6 +33,10 @@ function emptyState() {
     batchUrls: [],
     parseJobs: {},
     warnings: [],
+    // Per-break fidelity audit from the last import (teams captured vs the full
+    // 32-team slate, missing teams, one-team-per-break collisions). See
+    // server/parser/index.cjs. Surfaced read-only in the Checker tab.
+    breakAudit: [],
     // Saved daily snapshots of order + shipping data (History tab). Persist
     // across PDF re-imports, like the user table.
     snapshots: [],

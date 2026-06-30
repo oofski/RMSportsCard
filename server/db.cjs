@@ -54,6 +54,7 @@ class Db {
     s.orders = dataset.orders || []
     s.batchUrls = dataset.batchUrls || []
     s.warnings = dataset.warnings || []
+    s.breakAudit = dataset.breakAudit || []
     if (filename) s.meta.lastImportFilename = filename
     this.store.saveNow()
     return this.summary()
@@ -72,6 +73,10 @@ class Db {
       totalRevenue: Math.round(totalRevenue * 100) / 100,
       trackingNumbers: s.shipments.length,
       warnings: s.warnings.length,
+      // Fidelity at a glance: how many breaks are missing teams vs the full 32,
+      // and how many one-team-per-break collisions were detected on import.
+      breaksMissingTeams: (s.breakAudit || []).filter((b) => !b.hasAll32).length,
+      breakCollisions: (s.breakAudit || []).reduce((sum, b) => sum + ((b.collisions && b.collisions.length) || 0), 0),
     }
   }
 
@@ -84,10 +89,12 @@ class Db {
   // ---------------------------------------------------------------------------
   listBreaks() {
     const s = this.store.state
+    const auditByNumber = new Map((s.breakAudit || []).map((a) => [a.breakNumber, a]))
     return s.breaks
       .map((b) => {
         const slots = s.teamSlots.filter((t) => t.breakId === b.id)
         const checked = slots.filter((t) => t.checkedOff).length
+        const audit = auditByNumber.get(b.breakNumber) || null
         return {
           id: b.id,
           breakNumber: b.breakNumber,
@@ -96,6 +103,14 @@ class Db {
           totalTeams: slots.length, // actual SOLD slots, not the 32 max (spec §13)
           checkedTeams: checked,
           status: b.status,
+          // Fidelity: how complete this break is vs the full 32-team NFL slate,
+          // which teams are missing, and any one-team-per-break collisions. Null
+          // audit (older imports) degrades gracefully on the UI side.
+          maxTeams: audit ? audit.maxTeams : 32,
+          missingCount: audit ? audit.missingCount : null,
+          missingTeams: audit ? audit.missingTeams : [],
+          hasAll32: audit ? audit.hasAll32 : null,
+          collisions: audit ? audit.collisions : [],
         }
       })
       .sort((a, b) => a.breakNumber - b.breakNumber)
@@ -263,16 +278,39 @@ class Db {
 
   /**
    * Auto-tracking: bulk-update statuses by tracking number (called by the
-   * Electron main process after a provider lookup). Writes only when the code
-   * changed AND the current status was NOT set by a human — enforcing the spec's
-   * "manual status is truth" rule (§13): an automatic scan must never overwrite a
-   * status an operator deliberately set. Auto may update statuses that are unset
-   * or were themselves set automatically. Stamps setBy ('auto' | '17track').
+   * Electron main process after a provider lookup). Enforces the spec's "manual
+   * status is truth" rule (§13) — an automatic scan must never overwrite a status
+   * an operator DELIBERATELY chose — but with one deliberate exception so genuine
+   * carrier progress is never lost:
+   *
+   *   A row that is still in a PRE-SHIP state (`not_shipped` / `label_created`)
+   *   may always be advanced FORWARD by a real carrier scan, even if a human set
+   *   that pre-ship state. This matters because the unified Orders queue stamps a
+   *   human `setBy` of `not_shipped` when an operator merely PACKS an order (a
+   *   "to_pick"/"put_together" stage); that is "I packed it", NOT "freeze this
+   *   row forever". Without this exception a packed-then-shipped package stays
+   *   stuck on "Not Shipped" because auto-tracking refuses to write `in_transit`.
+   *
+   * A human who forced a terminal/shipping decision (delivered/returned/
+   * exception/in_transit/out_for_delivery) is still fully protected.
+   *
+   * Auto markers ('auto' | '17track' | 'usps') count as non-human so a previous
+   * automatic write never blocks the next one. ('usps' is the default-scraper
+   * marker — it MUST be whitelisted here, or the scraper would lock itself out
+   * after its first write and could only ever advance a row once.)
+   *
    * @param {Record<string,string>} map trackingNumber -> status code
    */
   bulkSetShipmentStatusByTracking(map, { by = 'auto' } = {}) {
     const s = this.store.state
-    const AUTO_SETTERS = ['auto', '17track'] // markers for an automatic (non-human) write
+    // Markers for an automatic (non-human) write. 'usps' is the default scrape
+    // provider's marker (see electron/main.cjs) — omitting it self-locks the scraper.
+    const AUTO_SETTERS = ['auto', '17track', 'usps']
+    // Pre-ship codes a carrier scan is always allowed to advance forward, even
+    // when a human set them while packing (packing is not a "freeze" decision).
+    const PRESHIP = ['not_shipped', 'label_created']
+    // Real carrier-progress target codes (a forward scan moves a row INTO one).
+    const CARRIER = ['label_created', 'in_transit', 'out_for_delivery', 'delivered', 'exception', 'returned']
     let updated = 0
     let unchanged = 0
     let kept = 0 // manual statuses intentionally left untouched
@@ -282,10 +320,14 @@ class Db {
       if (!VALID_SHIPMENT_CODES.includes(code)) continue
       const cur = sh.manualStatus || {}
       if (cur.code === code) { unchanged += 1; continue }
-      // Manual is truth: skip rows a real user set (setBy is a username, not an
-      // auto marker). Unset (null) or auto-set rows are fair game to update.
+      // Manual is truth: a status set by a real user (setBy is a username, not an
+      // auto marker) is normally left alone. Unset (null) or auto-set rows are
+      // always fair game.
       const humanSet = cur.setBy && !AUTO_SETTERS.includes(cur.setBy)
-      if (humanSet) { kept += 1; continue }
+      // ...EXCEPT a genuine carrier scan may advance a human pre-ship row forward
+      // (e.g. a packed "not_shipped" order that has now actually shipped).
+      const forwardFromPreship = PRESHIP.includes(cur.code) && CARRIER.includes(code)
+      if (humanSet && !forwardFromPreship) { kept += 1; continue }
       sh.manualStatus = { code, setAt: now(), setBy: by }
       sh.lastUpdated = now()
       updated += 1
@@ -359,6 +401,11 @@ class Db {
       packedBy: sh.packedBy || null,
       breaks,
       breakCount: breaks.length,
+      // Multi-card alarm: a customer with more than one card (team slot) across
+      // their breaks is flagged so the packer double-checks nothing is missed.
+      // cardCount is the total team slots; multiCard drives the warning badge.
+      cardCount: slots.length,
+      multiCard: slots.length > 1,
       pick: { checked, total: slots.length },
     }
   }

@@ -28,7 +28,7 @@
 // =============================================================================
 
 const { extractPages } = require('./pdf.cjs')
-const { matchTeam } = require('./teams.cjs')
+const { matchTeam, CANONICAL } = require('./teams.cjs')
 const { buildUspsUrl, buildBatchUrls } = require('./batchUrls.cjs')
 const RX = require('./regex.cjs')
 
@@ -41,6 +41,26 @@ function toLines(page) {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 0)
+}
+
+// True for the non-team "structural" lines inside a breaking-slip break section
+// (order summaries, item/break counts, totals, page indicators, headers). Used
+// to guard the team-name fallback so it only ever promotes a real team line —
+// never a structural line — to a purchased slot when the checkbox glyph is gone.
+function isStructuralBreakLine(line) {
+  return (
+    !line ||
+    /^Orders:/i.test(line) ||
+    /^Total:/i.test(line) ||
+    /^Break\s+#/i.test(line) ||
+    /^\d+\s+(Item|Items|Item\(s\)|Break|Breaks)\b/i.test(line) ||
+    /^Item\(s\)/i.test(line) ||
+    /^#\d/.test(line) ||
+    /^\d+\s*\/\s*\d+$/.test(line) ||
+    /^User\b/i.test(line) ||
+    /^Whatnot\b/i.test(line) ||
+    /Break(?:ing)?\s+Slip/i.test(line)
+  )
 }
 
 // Normalize a captured USPS service name to one of the two canonical values the
@@ -205,6 +225,20 @@ function parseBreakingSlip(block) {
         if (rawTeam && !/^Item\(s\)$/i.test(rawTeam) && !/^\d+\s+Item\(s\)$/i.test(rawTeam)) {
           current.teams.push(rawTeam)
         }
+        continue
+      }
+
+      // FALLBACK — recover a team whose checkbox glyph did not survive text
+      // extraction. Inside a break section, a non-structural line that
+      // confidently resolves to a known NFL team IS a purchased slot. Without
+      // this, any breaking slip whose checkboxes render as an unknown glyph would
+      // yield ZERO teams and silently fall back to the noisy packing slip — the
+      // exact "losing fidelity" failure. We strip any leading marker remnant and
+      // require a real team match (matchTeam only resolves within edit-distance 2).
+      if (isStructuralBreakLine(line)) continue
+      const stripped = line.replace(/^[^A-Za-z0-9]+/, '').trim()
+      if (stripped && matchTeam(stripped).team) {
+        current.teams.push(stripped)
       }
     }
   }
@@ -592,12 +626,59 @@ function parsePages(pages, { onProgress } = {}) {
       status: 'pending',
     }))
 
+  // ---------------------------------------------------------------------------
+  // PER-BREAK FIDELITY AUDIT (across ALL customers)
+  // ---------------------------------------------------------------------------
+  // A break is a single case slot for every one of the 32 NFL teams, and a given
+  // team belongs to exactly ONE customer per break (spec §2.3). After building
+  // every team slot we audit each break so fidelity loss is VISIBLE rather than
+  // silent: how many of the 32 teams we captured, which are missing, and whether
+  // any team was assigned to more than one customer (a true data error). The
+  // missing list is informational (not every team is necessarily sold), but a
+  // COLLISION is surfaced as a hard warning.
+  const breakAudit = [...breakNumbers]
+    .sort((a, b) => a - b)
+    .map((n) => {
+      const slots = teamSlots.filter((t) => t.breakNumber === n)
+      const byTeam = new Map() // canonical team -> [customerId,...]
+      for (const slot of slots) {
+        const mt = matchTeam(slot.teamName)
+        const canon = mt.team || slot.teamName
+        if (!byTeam.has(canon)) byTeam.set(canon, [])
+        byTeam.get(canon).push(slot.customerId)
+      }
+      const missingTeams = CANONICAL.filter((t) => !byTeam.has(t))
+      const collisions = []
+      for (const [team, custs] of byTeam) {
+        const distinct = [...new Set(custs)]
+        if (distinct.length > 1) {
+          collisions.push({ team, customers: distinct })
+          warnings.push({
+            page: null,
+            message: `Break #${n}: "${team}" is assigned to ${distinct.length} customers (${distinct.join(', ')}) — only one customer may own a team per break`,
+            rawText: null,
+          })
+        }
+      }
+      return {
+        breakNumber: n,
+        teamCount: slots.length, // total purchased slots (may exceed distinct if duplicated)
+        distinctTeamCount: byTeam.size,
+        maxTeams: CANONICAL.length, // 32
+        missingCount: missingTeams.length,
+        missingTeams,
+        hasAll32: missingTeams.length === 0,
+        collisions,
+      }
+    })
+
   // STEP 5 — batched USPS "open all" URLs across every shipment's tracking #.
   const batchUrls = buildBatchUrls(trackingNumbers)
 
   return {
     event,
     breaks,
+    breakAudit,
     teamSlots,
     customers,
     shipments,

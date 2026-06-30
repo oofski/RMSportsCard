@@ -107,6 +107,33 @@ export default function BreakList({ breaks, loading, error, onOpenBreak }) {
                   {checked} / {total}
                 </span>
               </div>
+
+              {/* ---- Fidelity line: teams captured vs the full 32-team slate ----
+                  A break is a slot for all 32 NFL teams. We surface how many we
+                  parsed so a fidelity gap (teams lost in the upload) is visible,
+                  and alarm on any one-team-per-break collision. */}
+              {brk.missingCount != null && (
+                <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                  {brk.hasAll32 ? (
+                    <span className="badge green small">✓ all {brk.maxTeams} teams</span>
+                  ) : (
+                    <span
+                      className="badge amber small"
+                      title={`Missing ${brk.missingCount} of ${brk.maxTeams}: ${(brk.missingTeams || []).join(', ')}`}
+                    >
+                      ⚠️ {brk.maxTeams - brk.missingCount}/{brk.maxTeams} teams · {brk.missingCount} missing
+                    </span>
+                  )}
+                  {brk.collisions && brk.collisions.length > 0 && (
+                    <span
+                      className="badge red small"
+                      title={brk.collisions.map((c) => `${c.team}: ${c.customers.join(', ')}`).join('\n')}
+                    >
+                      🔴 {brk.collisions.length} duplicate team{brk.collisions.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+              )}
             </button>
           )
         })}

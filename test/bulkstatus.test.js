@@ -51,4 +51,46 @@ describe('bulkSetShipmentStatusByTracking — manual is truth', () => {
     expect(res.updated).toBe(0)
     expect(res.unchanged).toBe(1)
   })
+
+  it('advances a human-set PRE-SHIP (packed) row forward when the carrier scan ships it', () => {
+    // Reproduces the reported bug: an operator PACKS an order via the Orders
+    // queue, which stamps manualStatus { code:'not_shipped', setBy:<username> }.
+    // The package then actually ships; a carrier scan reads 'in_transit'. The
+    // packed (human pre-ship) row MUST advance — packing is not a "freeze".
+    const ship = db.listShipments()[0]
+    db.setOrderStage(ship.id, 'put_together', { username: 'alice' }) // human, not_shipped
+    const beforePacked = db.listShipments().find((s) => s.id === ship.id)
+    expect(beforePacked.manualStatus.code).toBe('not_shipped')
+    expect(beforePacked.manualStatus.setBy).toBe('alice') // human-set
+
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('in_transit') // advanced, not stuck on not_shipped
+    expect(res.updated).toBe(1)
+  })
+
+  it('does NOT advance a human-set TERMINAL decision (delivered stays put)', () => {
+    // A human who forced a terminal/shipping state is still protected — only
+    // pre-ship rows may be advanced forward by a scan.
+    const ship = db.listShipments()[0]
+    db.updateShipment(ship.id, { manualStatus: 'delivered' }, { username: 'alice' })
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('delivered')
+    expect(res.kept).toBe(1)
+  })
+
+  it("treats the default scraper marker ('usps') as auto so it never self-locks", () => {
+    // The scraper writes setBy:'usps'. A SECOND scrape must be able to advance
+    // the row it wrote on the first scrape — 'usps' must count as an auto setter.
+    const ship = db.listShipments()[0]
+    db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'label_created' }, { by: 'usps' })
+    const mid = db.listShipments().find((s) => s.id === ship.id)
+    expect(mid.manualStatus.setBy).toBe('usps')
+
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('in_transit') // not locked out by its own prior write
+    expect(res.updated).toBe(1)
+  })
 })

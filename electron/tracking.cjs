@@ -122,55 +122,55 @@ const PROBE_JS = `(function () {
       }
     }
 
-    // --- 2) Status banner extraction --------------------------------------
-    // Prefer the canonical status banner. We try a priority list of selectors;
-    // the first match that contains a short, non-empty status phrase wins.
-    var selectors = [
-      '.tb-status',
-      '.tb-status-detail',
-      '.delivery_status',
-      '[class*="status"]'
-    ];
-    for (var s = 0; s < selectors.length; s++) {
+    // --- 2) Status banner extraction (collect, don't first-match) ---------
+    // The OLD code returned the FIRST node (across all selectors) that was 3..200
+    // chars. That broke in-transit pages: USPS leads with a delivery-date / bold
+    // "Arriving On Time" HEADLINE while the literal "In Transit" / "Moving Through
+    // Network" text sits in the lower-priority detail node — so first-match
+    // grabbed an unmappable headline (or, worse, the over-broad [class*="status"]
+    // catch-all grabbed page chrome like "Tracking Status"), the mapper returned
+    // null, and the shipment was left stuck on "Not Shipped".
+    //
+    // Fix: COLLECT the trustworthy status nodes and CONCATENATE them headline-
+    // first, so the "In Transit" detail always rides along even when the headline
+    // is just a delivery date. The broad [class*="status"] catch-all is demoted to
+    // a LAST resort (only when the specific selectors yield nothing) so it can no
+    // longer hijack the result. The mapper (mapStatusText) already lets terminal
+    // states win over in-transit history, so joining is precedence-safe.
+    function collect(sel, out) {
       var nodes;
-      try {
-        nodes = document.querySelectorAll(selectors[s]);
-      } catch (e) {
-        continue; // bad selector should be impossible, but never throw
-      }
-      for (var n = 0; n < nodes.length; n++) {
-        var raw = (nodes[n] && nodes[n].innerText) ? nodes[n].innerText : '';
-        var txt = raw.replace(/\\s+/g, ' ').trim();
-        // A status banner is short. Skip empty nodes and skip huge blobs that
-        // are clearly a [class*="status"] container holding the whole history.
-        if (txt && txt.length >= 3 && txt.length <= 200) {
-          return { state: 'ready', text: txt };
-        }
+      try { nodes = document.querySelectorAll(sel); }
+      catch (e) { return; }
+      for (var i = 0; i < nodes.length; i++) {
+        var raw = (nodes[i] && nodes[i].innerText) ? nodes[i].innerText : '';
+        var t = raw.replace(/\\s+/g, ' ').trim();
+        if (t && t.length >= 3 && t.length <= 200) out.push(t);
       }
     }
 
-    // --- 3) Fallback: a status-summary container --------------------------
-    // Some renders put the headline in a summary block rather than .tb-status.
-    var fallbackSelectors = [
-      '.track-bar-container',
-      '.status-summary',
-      '[class*="summary"]',
-      '[class*="banner"]'
-    ];
-    for (var f = 0; f < fallbackSelectors.length; f++) {
-      var fnodes;
-      try {
-        fnodes = document.querySelectorAll(fallbackSelectors[f]);
-      } catch (e2) {
-        continue;
-      }
-      for (var m = 0; m < fnodes.length; m++) {
-        var fraw = (fnodes[m] && fnodes[m].innerText) ? fnodes[m].innerText : '';
-        var ftxt = fraw.replace(/\\s+/g, ' ').trim();
-        if (ftxt && ftxt.length >= 3 && ftxt.length <= 200) {
-          return { state: 'ready', text: ftxt };
-        }
-      }
+    var parts = [];
+    collect('.tb-status', parts);         // canonical bold status / headline
+    collect('.tb-status-detail', parts);  // "In Transit ...", "Moving Through Network"
+    collect('.delivery_status', parts);
+    // Only reach for the broad catch-all + summary containers if the specific
+    // status selectors produced nothing at all.
+    if (parts.length === 0) {
+      collect('[class*="status"]', parts);
+      collect('.track-bar-container', parts);
+      collect('.status-summary', parts);
+      collect('[class*="summary"]', parts);
+      collect('[class*="banner"]', parts);
+    }
+
+    if (parts.length > 0) {
+      // Join with a NEWLINE (not " — "): mapStatusText's delivery-date strip
+      // rules match [^\\n.]* and stop at a newline, so a newline keeps each
+      // part's strip self-contained. A " — " separator would let an "Expected
+      // Delivery ..." headline strip bleed across and eat the "In Transit"
+      // detail that follows.
+      var joined = parts.join('\\n');
+      if (joined.length > 400) joined = joined.slice(0, 400);
+      return { state: 'ready', text: joined };
     }
 
     // Nothing decisive yet — tell the poller to keep waiting.

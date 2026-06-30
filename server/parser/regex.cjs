@@ -44,13 +44,20 @@ const ORDER_ID = /Order\s+(\d+)/
 
 // "Break #7" — the break number a product belongs to (appears on BOTH the
 // packing slip product attribute and the breaking slip section header).
-const BREAK_NUMBER = /Break\s+#(\d+)/
+// Case-insensitive and tolerant of an optional space after '#' ("Break # 7"),
+// because the real PDF text layer is inconsistent about both.
+const BREAK_NUMBER = /Break\s+#\s*(\d+)/i
 
 // --- Breaking Slip (the internal pick / break document) ---------------------
 
-// Marks the top of a "Whatnot - Breaking Slip" page (the internal pick doc that
-// is our GROUND TRUTH for which teams a customer bought in which break).
-const BREAKING_SLIP_START = /Whatnot - Breaking Slip/
+// Marks the top of the internal pick doc (our GROUND TRUTH for which teams a
+// customer bought in which break). Whatnot has printed this header several ways
+// — "Whatnot - Breaking Slip", "Whatnot - Break Slip", "Whatnot Break Slip" —
+// and the extracted dash can be a hyphen/en-dash/em-dash or absent. We match all
+// of them case-insensitively so the ground-truth path is never skipped over a
+// cosmetic header difference (which would silently drop us to the noisier
+// packing-slip fallback and lose team fidelity).
+const BREAKING_SLIP_START = /Whatnot\s*[-–—]?\s*Break(?:ing)?\s+Slip/i
 
 // "Real Name (handle)" — the line directly under the "User" label on a breaking
 // slip. Group 1 = real name (non-greedy so it stops before the parens), group 2
@@ -63,12 +70,16 @@ const ORDER_IDS_LINE = /#(\d+)/g
 
 // Section header on the breaking slip: "Break #4". Same shape as BREAK_NUMBER
 // but named per its breaking-slip role for readability at the call site.
-const BREAK_HEADER = /Break\s+#(\d+)/
+const BREAK_HEADER = /Break\s+#\s*(\d+)/i
 
-// A team checkbox line on the breaking slip: "__ Dallas Cowboys" (two-or-more
-// leading underscores = the empty checkbox, then the team name). Each such line
-// is exactly one purchased team slot. Anchored — test against a single line.
-const TEAM_CHECKBOX = /^_{2,}\s+(.+)$/
+// A team checkbox line on the breaking slip: "__ Dallas Cowboys". The picker's
+// empty checkbox most often extracts as two-or-more underscores, but depending
+// on the PDF's font/glyphs it can also render as a bracket box ("[ ]", "[]"),
+// a Unicode ballot/box glyph (☐ ☑ ✓ ✔ ❑ ▢ ◻ ◼ □ ■), or a bullet/dash. We accept
+// any of those leading markers, then capture the team name. Anchored — test
+// against a single trimmed line. (Lines with NO checkbox glyph at all are still
+// recovered by the team-name fallback in parseBreakingSlip.)
+const TEAM_CHECKBOX = /^(?:_{2,}|\[[ xX]?\]|[☐☑✓✔❑▢◻◼□■•·])\s+(.+)$/
 
 // "Total: $123.45" — the dollar total for a break on the breaking slip; used as
 // the price fallback when a packing-slip per-order price is unavailable.
