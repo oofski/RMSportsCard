@@ -20,6 +20,11 @@ module.exports = function orderRoutes({ db, requireAuth }) {
     res.json(db.listOrders())
   })
 
+  // Reset the manual queue ordering back to the default import order.
+  router.post('/orders/reset-queue', requireAuth, (_req, res) => {
+    res.json(db.resetQueueOrder())
+  })
+
   router.patch('/orders/:id/stage', requireAuth, (req, res, next) => {
     try {
       const row = db.setOrderStage(req.params.id, req.body && req.body.stage, req.user)

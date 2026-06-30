@@ -42,7 +42,7 @@ async function fetchOne(trackingNumber) {
       sleep(20000),
     ])
     // Give the page's JS a moment to render the status banner.
-    await sleep(3500)
+    await sleep(2200)
     const text = await win.webContents
       .executeJavaScript('document.body ? document.body.innerText : ""', true)
       .catch(() => '')
@@ -56,24 +56,35 @@ async function fetchOne(trackingNumber) {
 
 /**
  * Refresh statuses for a list of shipments (each { trackingNumber }). Returns a
- * map trackingNumber -> statusCode for the ones we could read. Sequential with a
- * small delay so we never hammer USPS.
- * @param {{ shipments: Array, onProgress?: Function }} opts
+ * map trackingNumber -> statusCode for the ones we could read.
+ *
+ * Speed without an API key: instead of one lookup at a time, we run a small pool
+ * of hidden windows CONCURRENTLY (default 6). For ~112 packages that turns a
+ * ~9-minute serial crawl into roughly a minute, while staying gentle enough not
+ * to trip USPS rate limits.
+ * @param {{ shipments: Array, onProgress?: Function, concurrency?: number }} opts
  */
-async function refreshTracking({ shipments, onProgress } = {}) {
+async function refreshTracking({ shipments, onProgress, concurrency = 6 } = {}) {
   const map = {}
   const list = (shipments || []).filter((s) => s && s.trackingNumber)
   let done = 0
-  for (const sh of list) {
-    let code = null
-    try { code = await fetchOne(sh.trackingNumber) } catch (_) { code = null }
-    if (code) map[sh.trackingNumber] = code
-    done += 1
-    if (typeof onProgress === 'function') {
-      onProgress({ done, total: list.length, trackingNumber: sh.trackingNumber, code })
+  let cursor = 0
+
+  async function worker() {
+    while (cursor < list.length) {
+      const sh = list[cursor++]
+      let code = null
+      try { code = await fetchOne(sh.trackingNumber) } catch (_) { code = null }
+      if (code) map[sh.trackingNumber] = code
+      done += 1
+      if (typeof onProgress === 'function') {
+        onProgress({ done, total: list.length, trackingNumber: sh.trackingNumber, code })
+      }
     }
-    await sleep(800)
   }
+
+  const poolSize = Math.max(1, Math.min(concurrency, list.length || 1))
+  await Promise.all(Array.from({ length: poolSize }, () => worker()))
   return map
 }
 

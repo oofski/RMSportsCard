@@ -78,6 +78,11 @@ export const getOrders = () => request('/api/orders')
 export const setOrderStage = (id, stage) => request(`/api/orders/${id}/stage`, { method: 'PATCH', body: { stage } })
 export const setOrderHold = (id, onHold, reason) => request(`/api/orders/${id}/hold`, { method: 'PATCH', body: { onHold, reason } })
 export const moveOrder = (id, direction) => request(`/api/orders/${id}/move`, { method: 'PATCH', body: { direction } })
+export const resetQueue = () => request('/api/orders/reset-queue', { method: 'POST' })
+
+// ---- Whatnot orders + sales analytics -------------------------------------
+export const getWhatnotOrders = () => request('/api/whatnot-orders')
+export const getSales = () => request('/api/sales')
 
 // ---- Dashboard / settings -------------------------------------------------
 export const getDashboard = () => request('/api/dashboard')

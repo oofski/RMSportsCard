@@ -429,6 +429,99 @@ class Db {
     return this._orderRow(target)
   }
 
+  /**
+   * Reset the manual queue order back to the default (import order). Use this
+   * to recover after dragging orders around. Also clears holds optionally? No —
+   * holds are intentional; only the ordering is reset.
+   */
+  resetQueueOrder() {
+    const s = this.store.state
+    s.shipments.forEach((sh, i) => { sh.queueOrder = i + 1 })
+    this.store.saveNow()
+    return this.listOrders()
+  }
+
+  // ---------------------------------------------------------------------------
+  // Whatnot Orders (raw line items) + Sales analytics
+  // ---------------------------------------------------------------------------
+  /** Flat list of every Whatnot order line item, joined with customer info. */
+  listWhatnotOrders() {
+    const s = this.store.state
+    return s.orders
+      .map((o) => {
+        const c = s.customers.find((x) => x.id === o.customerId)
+        return {
+          orderId: o.id,
+          breakNumber: o.breakNumber,
+          teamName: o.teamName,
+          price: Number(o.price) || 0,
+          isGiveaway: !!o.isGiveaway,
+          customer: c
+            ? { handle: c.whatnotHandle, realName: c.realName, isNew: !!c.isNew }
+            : { handle: o.customerId, realName: o.customerId, isNew: false },
+        }
+      })
+      .sort((a, b) => (a.breakNumber - b.breakNumber) || String(a.orderId).localeCompare(String(b.orderId)))
+  }
+
+  /** Aggregated sales analytics for the Whatnot Sales Dashboard. */
+  getSalesDashboard() {
+    const s = this.store.state
+    const orders = s.orders
+    const paid = orders.filter((o) => !o.isGiveaway)
+    const giveaways = orders.filter((o) => o.isGiveaway)
+    const totalRevenue = orders.reduce((sum, o) => sum + (Number(o.price) || 0), 0)
+    const round = (n) => Math.round(n * 100) / 100
+
+    // Revenue + counts per break.
+    const breakMap = new Map()
+    orders.forEach((o) => {
+      if (!breakMap.has(o.breakNumber)) breakMap.set(o.breakNumber, { breakNumber: o.breakNumber, orders: 0, revenue: 0 })
+      const b = breakMap.get(o.breakNumber)
+      b.orders += 1
+      b.revenue += Number(o.price) || 0
+    })
+    const revenueByBreak = [...breakMap.values()].sort((a, b) => a.breakNumber - b.breakNumber).map((b) => ({ ...b, revenue: round(b.revenue) }))
+
+    // Per-team popularity (count) + revenue.
+    const teamMap = new Map()
+    orders.forEach((o) => {
+      if (!teamMap.has(o.teamName)) teamMap.set(o.teamName, { teamName: o.teamName, count: 0, revenue: 0 })
+      const t = teamMap.get(o.teamName)
+      t.count += 1
+      t.revenue += Number(o.price) || 0
+    })
+    const topTeams = [...teamMap.values()].map((t) => ({ ...t, revenue: round(t.revenue) }))
+      .sort((a, b) => b.revenue - a.revenue || b.count - a.count)
+
+    // Top customers by spend.
+    const custMap = new Map()
+    orders.forEach((o) => {
+      if (!custMap.has(o.customerId)) custMap.set(o.customerId, { customerId: o.customerId, orders: 0, revenue: 0 })
+      const c = custMap.get(o.customerId)
+      c.orders += 1
+      c.revenue += Number(o.price) || 0
+    })
+    const topCustomers = [...custMap.values()].map((c) => {
+      const cust = s.customers.find((x) => x.id === c.customerId)
+      return { handle: cust ? cust.whatnotHandle : c.customerId, realName: cust ? cust.realName : c.customerId, orders: c.orders, revenue: round(c.revenue) }
+    }).sort((a, b) => b.revenue - a.revenue)
+
+    return {
+      event: s.meta.event,
+      totalRevenue: round(totalRevenue),
+      totalOrders: orders.length,
+      paidOrders: paid.length,
+      giveaways: giveaways.length,
+      avgOrderValue: paid.length ? round(totalRevenue / paid.length) : 0,
+      uniqueCustomers: s.customers.length,
+      newCustomers: s.customers.filter((c) => c.isNew).length,
+      revenueByBreak,
+      topTeams,
+      topCustomers,
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Dashboard (spec §8 / §12)
   // ---------------------------------------------------------------------------
@@ -443,7 +536,7 @@ class Db {
       if (slots.length > 0 && slots.every((t) => t.checkedOff)) breakStats.complete += 1
     })
 
-    const shippingStats = { not_shipped: 0, in_transit: 0, out_for_delivery: 0, delivered: 0, exception: 0, returned: 0, not_updated: 0 }
+    const shippingStats = { not_shipped: 0, label_created: 0, in_transit: 0, out_for_delivery: 0, delivered: 0, exception: 0, returned: 0, not_updated: 0 }
     s.shipments.forEach((sh) => {
       const code = (sh.manualStatus && sh.manualStatus.code) || 'not_shipped'
       shippingStats[code] = (shippingStats[code] || 0) + 1

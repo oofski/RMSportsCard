@@ -16,6 +16,7 @@
   "uspsTrackBaseUrl": "https://tools.usps.com/go/TrackConfirmAction?tLabels=",
   "shipmentStatuses": [
     { "code": "not_shipped",      "label": "Not Shipped",      "emoji": "⬜", "color": "#9ca3af", "isException": false },
+    { "code": "label_created",    "label": "Label Created",    "emoji": "🏷️", "color": "#60a5fa", "isException": false },
     { "code": "in_transit",       "label": "In Transit",       "emoji": "🟡", "color": "#eab308", "isException": false },
     { "code": "out_for_delivery", "label": "Out for Delivery", "emoji": "🟠", "color": "#f97316", "isException": false },
     { "code": "delivered",        "label": "Delivered",        "emoji": "✅", "color": "#22c55e", "isException": false },

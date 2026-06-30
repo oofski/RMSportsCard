@@ -26,8 +26,8 @@ describe('mapStatusText', () => {
   it('detects returned', () => {
     expect(mapStatusText('Being returned to sender')).toBe('returned')
   })
-  it('detects pre-shipment', () => {
-    expect(mapStatusText('Pre-Shipment\nShipping Label Created, USPS Awaiting Item')).toBe('not_shipped')
+  it('detects label created / pre-shipment', () => {
+    expect(mapStatusText('Pre-Shipment\nShipping Label Created, USPS Awaiting Item')).toBe('label_created')
   })
   it('returns null when undecidable / empty', () => {
     expect(mapStatusText('')).toBeNull()

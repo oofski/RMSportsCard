@@ -6,6 +6,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-30
+
+### Added
+- **Light / dark mode** toggle in the top bar, remembered between sessions.
+- **Whatnot Orders** tab/module: searchable, filterable table of every order
+  line item (order id, customer, break, team, price, paid/giveaway).
+- **Whatnot Sales Dashboard** tab: revenue/orders/avg-order-value/giveaways,
+  revenue-by-break bars, top teams, and top customers.
+- Planner **Reset queue** button (restores the default order) and a one-click
+  **✓ Done** per order that advances it to the next stage and drops it out of
+  the active view — no need to keep the whole card open.
+- New **Label Created** shipment status (USPS pre-shipment) in the status
+  dropdown and summaries.
+
+### Changed
+- Automatic USPS status is now **much faster**: lookups run through a pool of
+  hidden windows concurrently (≈6 at a time) instead of one-at-a-time, and the
+  per-page wait was trimmed. Still no API key.
+
+### Fixed
+- `moveOrder` now reorders orders as they're displayed (held rows excluded),
+  matching what you see.
+
 ## [1.1.1] - 2026-06-30
 
 ### Fixed

@@ -22,6 +22,23 @@
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
 }
 
+/* Light theme — applied when <html data-theme="light">. Only the palette
+   variables change; every component reads them, so both modes stay consistent. */
+:root[data-theme="light"] {
+  --bg: #f1f5f9;
+  --bg-2: #ffffff;
+  --bg-3: #e2e8f0;
+  --line: #cbd5e1;
+  --text: #0f172a;
+  --text-dim: #64748b;
+  --accent: #0284c7;
+  --accent-2: #0ea5e9;
+  --good: #16a34a;
+  --warn: #ca8a04;
+  --bad: #dc2626;
+  --shadow: 0 8px 30px rgba(15, 23, 42, 0.12);
+}
+
 * { box-sizing: border-box; }
 
 html, body, #root { height: 100%; margin: 0; }

@@ -1,7 +1,7 @@
 {
   "name": "rm-cardz",
   "productName": "RM Cardz",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "description": "RM Cardz — Break Manager & Shipping Tracker. Desktop app for NFL sports-card break fulfillment: parse Whatnot PDFs, run pick-and-pack checklists, and track USPS shipments.",
   "author": {
     "name": "rm_cardz",

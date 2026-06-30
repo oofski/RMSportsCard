@@ -19,6 +19,14 @@ import * as api from '../../api.js'
 import { PIPELINE_STAGES, stageByCode } from '../../constants.js'
 
 const FLAGGED = new Set(['exception', 'returned'])
+const PIPELINE_ORDER = ['to_pick', 'put_together', 'sent', 'all_good']
+
+// The next stage a one-click "Done" should advance an order to.
+function nextStageCode(stage) {
+  if (stage === 'exception' || stage === 'returned') return 'all_good'
+  const i = PIPELINE_ORDER.indexOf(stage)
+  return i >= 0 && i < PIPELINE_ORDER.length - 1 ? PIPELINE_ORDER[i + 1] : 'all_good'
+}
 
 export default function OrderQueue({ currentUser }) {
   const [orders, setOrders] = useState([])
@@ -86,6 +94,24 @@ export default function OrderQueue({ currentUser }) {
       await load() // a move swaps two rows; reload to reflect the new order
     } catch (err) { flash(err.message || 'Could not move order') }
   }, [load, flash])
+
+  // ---- One-click "Done": advance to the next stage and collapse the card --
+  // Because the active filter usually excludes the next stage, the finished
+  // order drops out of view automatically — no need to keep the whole thing open.
+  const markDone = useCallback(async (order) => {
+    setExpanded((prev) => { const n = new Set(prev); n.delete(order.id); return n })
+    await setStage(order, nextStageCode(order.stage))
+  }, [setStage])
+
+  // ---- Reset the manual queue order back to default -----------------------
+  const resetQueue = useCallback(async () => {
+    if (!window.confirm('Reset the queue back to its default order?')) return
+    try {
+      const rows = await api.resetQueue()
+      setOrders(Array.isArray(rows) ? rows : [])
+      flash('Queue order reset')
+    } catch (err) { flash(err.message || 'Could not reset queue') }
+  }, [flash])
 
   // ---- Toggle a team checkbox (shared pick detail) ------------------------
   const toggleTeam = useCallback(async (order, slot) => {
@@ -178,6 +204,9 @@ export default function OrderQueue({ currentUser }) {
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
         <h2 style={{ margin: 0 }}>📋 Planner — Order Queue</h2>
         <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-sm btn-ghost" onClick={resetQueue} title="Reset the manual queue order back to default">
+            ↩︎ Reset queue
+          </button>
           {tracking
             ? <span className="badge amber">Checking USPS… {tracking.done}/{tracking.total}</span>
             : (
@@ -266,6 +295,11 @@ export default function OrderQueue({ currentUser }) {
 
             {/* Actions */}
             <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+              {!sd.terminal && (
+                <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title="Mark this step done and move it along the queue">
+                  ✓ Done → {(stageByCode[nextStageCode(o.stage)] || {}).label}
+                </button>
+              )}
               <button className="btn btn-sm btn-ghost" onClick={() => toggleExpand(o.id)}>
                 {isExpanded ? '▾ Hide teams' : '▸ Show teams'}
               </button>

@@ -22,7 +22,7 @@ function mapStatusText(rawText) {
   if (/alert|delivery exception|action needed|undeliverable|no access to delivery|delivery attempt[^\n]*?(unsuccess|fail)|held at|available for pickup|reschedule|address (issue|problem)/.test(t)) return 'exception'
   if (/out for delivery/.test(t)) return 'out_for_delivery'
   if (/in transit|arrived at|departed|in possession of|usps in possession|accepted|moving through network|on its way|processed through|picked up|origin facility|regional (origin|destination) facility/.test(t)) return 'in_transit'
-  if (/pre-shipment|shipping label created|label created|awaiting item|usps awaiting/.test(t)) return 'not_shipped'
+  if (/pre-shipment|shipping label created|label created|awaiting item|usps awaiting/.test(t)) return 'label_created'
   return null
 }
 

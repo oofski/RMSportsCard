@@ -5,11 +5,13 @@
 
 import React from 'react'
 
-export default function TopBar({ user, appVersion, tab, onTab, onLogout, onOpenSettings, onOpenUsers, onUploadNew }) {
+export default function TopBar({ user, appVersion, tab, onTab, onLogout, onOpenSettings, onOpenUsers, onUploadNew, theme, onToggleTheme }) {
   const TABS = [
     { key: 'planner', label: '📋 Planner' },
     { key: 'checker', label: '✅ Checker' },
     { key: 'shipping', label: '🚚 Shipping Tracker' },
+    { key: 'whatnot', label: '🧾 Whatnot Orders' },
+    { key: 'sales', label: '💰 Sales Dashboard' },
     { key: 'overview', label: '📊 Overview' },
   ]
   return (
@@ -30,6 +32,15 @@ export default function TopBar({ user, appVersion, tab, onTab, onLogout, onOpenS
 
       {onUploadNew && (
         <button className="btn btn-sm" onClick={onUploadNew} title="Import a different Whatnot PDF">⬆ Upload New PDF</button>
+      )}
+      {onToggleTheme && (
+        <button
+          className="btn btn-sm btn-ghost"
+          onClick={onToggleTheme}
+          title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+        >
+          {theme === 'light' ? '🌙' : '☀️'}
+        </button>
       )}
       <button className="btn btn-sm btn-ghost" onClick={onOpenSettings} title="Settings">⚙️</button>
       {user.role === 'admin' && (
