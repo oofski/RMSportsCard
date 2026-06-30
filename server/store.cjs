@@ -36,6 +36,9 @@ function emptyState() {
     // Saved daily snapshots of order + shipping data (History tab). Persist
     // across PDF re-imports, like the user table.
     snapshots: [],
+    // Uploaded Whatnot ledger CSV (Sales Dashboard). { filename, uploadedAt,
+    // rows:[classified], settings:{ breaksPerCase } } or null.
+    ledger: null,
   }
 }
 
