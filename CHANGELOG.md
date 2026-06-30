@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-30
+
+### Added
+- New **Order Tracking** tab — a simple, read-only overview of every order: the
+  order name (customer), its status, and each break with the teams in it. No
+  controls, just an at-a-glance view; it refreshes itself every few seconds.
+  It's now the default landing tab.
+
+### Changed
+- The full interactive order queue (advance/Done, hold, reorder, USPS auto-update,
+  per-team pick) is now the **Order Manager** tab (🗂), kept separate from the
+  simple Order Tracking view.
+
 ## [1.3.1] - 2026-06-30
 
 ### Fixed — auto-update
