@@ -1,5 +1,201 @@
-// STUB — replaced by the implementation agent. Keeps the build green meanwhile.
-import React from 'react'
-export default function SettingsModal(props) {
-  return <div className="card">SettingsModal (pending implementation)</div>
+// =============================================================================
+// Settings modal
+// -----------------------------------------------------------------------------
+// A lightweight overlay for the two operator-editable settings (event name and
+// breaks-per-event) plus read-only context (the imported event date and whether
+// any data is loaded). On desktop it also exposes the app version and a
+// "Check for updates" button that talks to the Electron main process via the
+// preloaded `window.rmcardz` bridge.
+//
+// Pattern: .modal-backdrop closes on click; the inner .modal.card stops
+// propagation so clicks inside it don't dismiss. We load current settings once
+// on mount, edit a local copy, and PATCH on Save before telling the parent to
+// refresh (onChanged) and closing (onClose).
+// =============================================================================
+
+import React, { useEffect, useState } from 'react'
+import * as api from '../api.js'
+
+// Backend default when no value has been configured yet (matches a 9-team box).
+const DEFAULT_BREAKS_PER_EVENT = 9
+
+export default function SettingsModal({ onClose, onChanged }) {
+  // --- Editable + read-only settings state --------------------------------
+  const [eventName, setEventName] = useState('')
+  const [breaksPerEvent, setBreaksPerEvent] = useState(DEFAULT_BREAKS_PER_EVENT)
+  const [eventDate, setEventDate] = useState('') // read-only, from import
+  const [hasData, setHasData] = useState(false) // read-only, from import
+
+  // --- Lifecycle / status state -------------------------------------------
+  const [loading, setLoading] = useState(true) // initial getSettings in flight
+  const [saving, setSaving] = useState(false) // updateSettings in flight
+  const [error, setError] = useState(null) // any surfaced failure text
+
+  // --- Desktop-only (Electron) extras -------------------------------------
+  // `window.rmcardz` only exists inside the Electron shell. In a plain browser
+  // these stay falsy and the update controls are simply not rendered.
+  const desktop = typeof window !== 'undefined' && !!window.rmcardz
+  const [appVersion, setAppVersion] = useState('') // resolved app version string
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
+
+  // Load current settings (and, on desktop, the app version) once on mount.
+  useEffect(() => {
+    let active = true
+    ;(async () => {
+      try {
+        const s = await api.getSettings()
+        if (!active) return
+        setEventName(s.eventName || '')
+        setBreaksPerEvent(
+          s.breaksPerEvent != null ? s.breaksPerEvent : DEFAULT_BREAKS_PER_EVENT,
+        )
+        setEventDate(s.eventDate || '')
+        setHasData(!!s.hasData)
+      } catch (err) {
+        if (active) setError(err.message || 'Could not load settings.')
+      } finally {
+        if (active) setLoading(false)
+      }
+
+      // App version is a desktop bridge call that returns a promise.
+      if (desktop) {
+        try {
+          const v = await window.rmcardz.getAppVersion()
+          if (active) setAppVersion(v)
+        } catch {
+          /* version is purely informational — ignore failures */
+        }
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [desktop])
+
+  // --- Save ----------------------------------------------------------------
+  // PATCH the two editable fields, then let the parent re-read and close. We
+  // coerce breaksPerEvent to a positive integer so the backend never receives a
+  // NaN/blank from an emptied number input.
+  const save = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const count = Number(breaksPerEvent)
+      await api.updateSettings({
+        eventName: eventName.trim(),
+        breaksPerEvent: Number.isFinite(count) && count > 0 ? count : DEFAULT_BREAKS_PER_EVENT,
+      })
+      onChanged()
+      onClose()
+    } catch (err) {
+      setError(err.message || 'Could not save settings.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // --- Check for updates (desktop only) -----------------------------------
+  const checkForUpdates = async () => {
+    setCheckingUpdates(true)
+    setError(null)
+    try {
+      await window.rmcardz.checkForUpdates()
+    } catch (err) {
+      setError(err.message || 'Could not check for updates.')
+    } finally {
+      setCheckingUpdates(false)
+    }
+  }
+
+  return (
+    // Clicking the dim backdrop closes; clicks inside .modal are stopped below.
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal card" onClick={(e) => e.stopPropagation()}>
+        <div className="row-between">
+          <h3>Settings</h3>
+          <button className="btn btn-ghost btn-sm" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+
+        {/* Any failure (load, save, update check) surfaces here. */}
+        {error && (
+          <div className="banner error" style={{ borderRadius: 8, margin: '12px 0' }}>
+            {error}
+          </div>
+        )}
+
+        {loading ? (
+          <p className="muted small">Loading settings…</p>
+        ) : (
+          <>
+            {/* ---- Editable fields --------------------------------------- */}
+            <label className="field">
+              <span>Event name</span>
+              <input
+                className="input"
+                value={eventName}
+                onChange={(e) => setEventName(e.target.value)}
+                placeholder="e.g. Friday Night Football Breaks"
+              />
+            </label>
+
+            <label className="field">
+              <span>Breaks per event</span>
+              <input
+                className="input"
+                type="number"
+                min={1}
+                value={breaksPerEvent}
+                onChange={(e) => setBreaksPerEvent(e.target.value)}
+              />
+            </label>
+
+            {/* ---- Read-only import context ------------------------------ */}
+            <div className="section-title">Imported event</div>
+            <div className="row-between small">
+              <span className="muted">Event date</span>
+              <span className="mono">{eventDate || '—'}</span>
+            </div>
+            <div className="row-between small" style={{ marginTop: 6 }}>
+              <span className="muted">Data loaded</span>
+              <span className={`badge${hasData ? ' green' : ' amber'}`}>
+                {hasData ? 'yes' : 'no'}
+              </span>
+            </div>
+
+            {/* ---- Desktop: version + update check ----------------------- */}
+            {desktop && (
+              <>
+                <div className="section-title">Application</div>
+                <div className="row-between small">
+                  <span className="muted">App version</span>
+                  <span className="mono">{appVersion || '—'}</span>
+                </div>
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    onClick={checkForUpdates}
+                    disabled={checkingUpdates}
+                  >
+                    {checkingUpdates ? 'Checking…' : 'Check for updates'}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* ---- Actions ----------------------------------------------- */}
+            <div className="row" style={{ marginTop: 18 }}>
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </button>
+              <button className="btn btn-ghost" onClick={onClose} disabled={saving}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
 }
