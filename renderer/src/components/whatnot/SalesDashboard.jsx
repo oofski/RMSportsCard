@@ -28,11 +28,14 @@ import * as api from '../../api.js'
 /**
  * Format a number as USD with two decimals — e.g. 1234.5 → "$1,234.50".
  * Number(n || 0) coerces null/undefined/'' to 0 so the output is never NaN.
- * Negative inputs naturally render with a leading minus (e.g. "-$703.02"),
- * which is exactly how we want giveaway losses to read.
+ * Negative inputs render with the minus BEFORE the dollar sign (e.g.
+ * "-$703.02"), which is exactly how we want giveaway losses to read — we
+ * format the magnitude and prepend the sign so it never lands as "$-703.02".
  */
 function money(n) {
-  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const v = Number(n || 0)
+  const body = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return (v < 0 ? '-$' : '$') + body
 }
 
 /** Format a plain integer count with thousands separators (e.g. 1,234). */
@@ -292,8 +295,9 @@ export default function SalesDashboard({ currentUser }) {
           {days.map((d) => {
             const net = Number(d.net) || 0
             // Scale the fill to the busiest day. When maxNet is 0 every bar sits
-            // at 0% (no NaN / divide-by-zero).
-            const pct = maxNet > 0 ? (net / maxNet) * 100 : 0
+            // at 0% (no NaN / divide-by-zero). Clamp to >=0 so a negative-net day
+            // (giveaways exceed gross) never yields an invalid negative width.
+            const pct = maxNet > 0 ? Math.max(0, (net / maxNet) * 100) : 0
             return (
               <div
                 key={d.day}

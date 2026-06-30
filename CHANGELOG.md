@@ -6,6 +6,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.3] - 2026-06-30
+
+### Added — Sales Dashboard runs on your Whatnot ledger CSV
+The **Sales Dashboard** tab is now driven by an uploaded Whatnot **Ledger** CSV
+export (the per-transaction earnings/giveaway/payout sheet). Drop the file in and
+it parses, classifies, and rolls up every row:
+- **Date range auto-set** from the counted rows (earnings + giveaways) — payout,
+  tip and adjustment rows never stretch the window.
+- **Headline revenue:** **Net Revenue** (gross earnings **minus** giveaways),
+  **Gross**, **Given Away** (shown in red), and the sales count.
+- **Revenue per day** as a scaled bar list, plus **revenue per break** and
+  **per case** — case size defaults to **9 breaks** and is adjustable inline,
+  recomputing the case rollups on the fly.
+- **Giveaways analyzed:** total money given away is tallied separately and netted
+  out of revenue, so you see exactly what the freebies cost.
+- **Stripe payout withdrawals are ignored** entirely — they're counted for
+  reference but never touch any revenue, giveaway, or date figure.
+- **Shipping subsidies and tips are shown separately and excluded** from revenue.
+- **Top breaks** table and an **unattributed** line for earnings with no
+  `Break #N`, plus a warnings panel for any rows that needed repair on import.
+- Built to survive real exports: BOM handling, `$1,234.56`/`-$x` amount parsing,
+  case-insensitive `Break #N` grouping, and repair of malformed (>8-column) rows
+  so stray text can't leak into the transaction-type column.
+
+### Fixed
+- Negative currency now renders as **`-$703.02`** (sign before the dollar sign),
+  not `$-703.02`, on the Given Away stat and any negative per-day net.
+- Per-day revenue bars clamp at 0% so a net-negative day can't produce an invalid
+  negative bar width.
+
 ## [1.5.2] - 2026-06-30
 
 ### Changed — streamlined, less clunky
