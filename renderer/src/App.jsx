@@ -14,7 +14,7 @@ import * as api from './api.js'
 import { setToken } from './api.js'
 
 import Login from './components/Login.jsx'
-import TopBar from './components/TopBar.jsx'
+import SideBar from './components/SideBar.jsx'
 import UpdateBanner from './components/UpdateBanner.jsx'
 import Upload from './components/Upload.jsx'
 import Dashboard from './components/Dashboard.jsx'
@@ -42,6 +42,13 @@ export default function App() {
     localStorage.setItem('rmcardz.theme', theme)
   }, [theme])
   const toggleTheme = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+
+  // Sidebar collapse: persisted icon-only rail vs. full nav.
+  const [navCollapsed, setNavCollapsed] = useState(() => localStorage.getItem('rmcardz.nav.collapsed') === '1')
+  useEffect(() => {
+    localStorage.setItem('rmcardz.nav.collapsed', navCollapsed ? '1' : '0')
+  }, [navCollapsed])
+  const toggleNav = () => setNavCollapsed((v) => !v)
 
   // Re-read whether an event is imported (drives the data gate).
   const refreshDataState = useCallback(async () => {
@@ -112,22 +119,26 @@ export default function App() {
     return (
       <div className="app">
         <UpdateBanner />
-        <TopBar
-          user={user}
-          appVersion={appVersion}
-          tab={null}
-          onTab={() => {}}
-          onLogout={handleLogout}
-          onOpenSettings={() => setSettingsOpen(true)}
-          onOpenUsers={() => setUsersOpen(true)}
-          onUploadNew={null}
-          theme={theme}
-          onToggleTheme={toggleTheme}
-        />
-        <div className="app-body">
-          <div className="container">
-            <Upload onImported={refreshDataState} />
-          </div>
+        <div className="app-shell">
+          <SideBar
+            user={user}
+            appVersion={appVersion}
+            tab={null}
+            onTab={() => {}}
+            collapsed={navCollapsed}
+            onToggleCollapse={toggleNav}
+            onLogout={handleLogout}
+            onOpenSettings={() => setSettingsOpen(true)}
+            onOpenUsers={() => setUsersOpen(true)}
+            onUploadNew={null}
+            theme={theme}
+            onToggleTheme={toggleTheme}
+          />
+          <main className="app-main">
+            <div className="container">
+              <Upload onImported={refreshDataState} />
+            </div>
+          </main>
         </div>
         {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} onChanged={refreshDataState} />}
         {usersOpen && <UserManager me={user} onClose={() => setUsersOpen(false)} />}
@@ -139,27 +150,31 @@ export default function App() {
   return (
     <div className="app">
       <UpdateBanner />
-      <TopBar
-        user={user}
-        appVersion={appVersion}
-        tab={tab}
-        onTab={setTab}
-        onLogout={handleLogout}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenUsers={() => setUsersOpen(true)}
-        onUploadNew={() => setHasData(false)}
-        theme={theme}
-        onToggleTheme={toggleTheme}
-      />
-      <div className="app-body">
-        <div className="container">
-          {tab === 'overview' && <Dashboard onGoTo={setTab} />}
-          {tab === 'planner' && <OrderQueue currentUser={user} />}
-          {tab === 'checker' && <BreakChecklist currentUser={user} />}
-          {tab === 'shipping' && <ShippingTracker currentUser={user} />}
-          {tab === 'whatnot' && <WhatnotOrders currentUser={user} />}
-          {tab === 'sales' && <SalesDashboard currentUser={user} />}
-        </div>
+      <div className="app-shell">
+        <SideBar
+          user={user}
+          appVersion={appVersion}
+          tab={tab}
+          onTab={setTab}
+          collapsed={navCollapsed}
+          onToggleCollapse={toggleNav}
+          onLogout={handleLogout}
+          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenUsers={() => setUsersOpen(true)}
+          onUploadNew={() => setHasData(false)}
+          theme={theme}
+          onToggleTheme={toggleTheme}
+        />
+        <main className="app-main">
+          <div className="container">
+            {tab === 'overview' && <Dashboard onGoTo={setTab} />}
+            {tab === 'planner' && <OrderQueue currentUser={user} />}
+            {tab === 'checker' && <BreakChecklist currentUser={user} />}
+            {tab === 'shipping' && <ShippingTracker currentUser={user} />}
+            {tab === 'whatnot' && <WhatnotOrders currentUser={user} />}
+            {tab === 'sales' && <SalesDashboard currentUser={user} />}
+          </div>
+        </main>
       </div>
 
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} onChanged={refreshDataState} />}

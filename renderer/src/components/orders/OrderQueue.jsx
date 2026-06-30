@@ -16,7 +16,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api.js'
-import { PIPELINE_STAGES, stageByCode } from '../../constants.js'
+import { PIPELINE_STAGES, ORDER_STAGES, stageByCode } from '../../constants.js'
 
 const FLAGGED = new Set(['exception', 'returned'])
 const PIPELINE_ORDER = ['to_pick', 'put_together', 'sent', 'all_good']
@@ -247,7 +247,8 @@ export default function OrderQueue({ currentUser }) {
         />
       </div>
 
-      {/* Order cards */}
+      {/* Simplified order list — one scannable row per order. The full pipeline,
+          hold/reorder, USPS and per-team pick detail live in the ▾ expand. */}
       {visible.length === 0 && <div className="muted">No orders match this filter.</div>}
       {visible.map((o, idx) => {
         const flagged = FLAGGED.has(o.stage)
@@ -255,87 +256,54 @@ export default function OrderQueue({ currentUser }) {
         const isExpanded = expanded.has(o.id)
         const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
         return (
-          <div key={o.id} className={`order-card ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''}`}>
-            {/* Header */}
-            <div className="row-between" style={{ flexWrap: 'wrap', gap: 8 }}>
-              <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-                <span className="badge" style={{ background: sd.color || 'var(--bg-3)', color: '#06283a' }}>
-                  {sd.emoji} {sd.label || o.stage}
-                </span>
+          <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${isExpanded ? 'open' : ''}`}>
+            <div className="order-row-main">
+              {/* Single status pill (replaces the 4-chip stepper) */}
+              <span className="order-status-pill" style={{ background: sd.color || 'var(--bg-3)' }}>
+                {sd.emoji} {sd.label || o.stage}
+              </span>
+
+              {/* Customer */}
+              <div className="order-row-id">
                 <strong>{o.customer.realName}</strong>
                 <span className="muted small">@{o.customer.handle}</span>
                 {o.customer.isNew && <span className="badge amber">NEW</span>}
-                {o.onHold && <span className="badge">⏸ On hold{o.heldReason ? `: ${o.heldReason}` : ''}</span>}
+                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>⏸{o.heldReason ? ` ${o.heldReason}` : ''}</span>}
               </div>
-              <div className="row" style={{ gap: 12 }}>
-                <span className="small muted">{o.breakCount} break{o.breakCount === 1 ? '' : 's'}</span>
-                <span className="small mono">{o.pick.checked}/{o.pick.total} picked</span>
-                {o.trackingNumber && (
-                  <span className="small mono nowrap" title={o.trackingNumber}>
-                    {o.trackingNumber.slice(0, 4)}…{o.trackingNumber.slice(-4)}
-                  </span>
-                )}
+
+              {/* At-a-glance meta: breaks · slim pick bar · picked · tracking */}
+              <div className="order-row-meta small muted">
+                <span>{o.breakCount} break{o.breakCount === 1 ? '' : 's'}</span>
+                <span className="bar bar-inline"><span className={pct >= 100 ? 'good' : ''} style={{ width: pct + '%' }} /></span>
+                <span className="mono">{o.pick.checked}/{o.pick.total}</span>
+                {o.trackingNumber && <span className="mono" title={o.trackingNumber}>{o.trackingNumber.slice(0, 4)}…{o.trackingNumber.slice(-4)}</span>}
               </div>
-            </div>
 
-            {/* Pick progress */}
-            <div className="bar" style={{ margin: '10px 0' }}>
-              <span className={pct >= 100 ? 'good' : ''} style={{ width: pct + '%' }} />
-            </div>
-
-            {/* Pipeline stepper */}
-            <div className="stage-steps">
-              {PIPELINE_STAGES.map((s, i) => (
-                <React.Fragment key={s.code}>
-                  {i > 0 && <span className="stage-arrow">→</span>}
-                  <button
-                    className={`stage-step ${o.stage === s.code ? 'active' : ''}`}
-                    style={o.stage === s.code ? { background: s.color } : undefined}
-                    onClick={() => setStage(o, s.code)}
-                    title={`Mark as ${s.label}`}
-                  >
-                    {s.emoji} {s.label}
+              {/* One primary action + a compact any-stage select + expander */}
+              <div className="order-row-actions">
+                {!sd.terminal && (
+                  <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title={`Mark done → ${(stageByCode[nextStageCode(o.stage)] || {}).label}`}>
+                    ✓ Done →
                   </button>
-                </React.Fragment>
-              ))}
-            </div>
-
-            {/* Actions */}
-            <div className="row" style={{ gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-              {!sd.terminal && (
-                <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title="Mark this step done and move it along the queue">
-                  ✓ Done → {(stageByCode[nextStageCode(o.stage)] || {}).label}
+                )}
+                <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Order stage" title="Set stage">
+                  {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.emoji} {s.label}</option>)}
+                </select>
+                <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} title={isExpanded ? 'Hide details' : 'Show details'}>
+                  {isExpanded ? '▾' : '▸'}
                 </button>
-              )}
-              <button className="btn btn-sm btn-ghost" onClick={() => toggleExpand(o.id)}>
-                {isExpanded ? '▾ Hide teams' : '▸ Show teams'}
-              </button>
-              <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>
-                {o.onHold ? '▶ Resume' : '⏸ Hold'}
-              </button>
-              {/* Reordering only makes sense against the full queue — disable it
-                  while a filter/search is active so the displayed index matches
-                  the real queue position the backend swaps against. */}
-              <button
-                className="btn btn-sm btn-ghost"
-                disabled={!reorderable || idx === 0}
-                onClick={() => move(o, 'up')}
-                title={reorderable ? 'Move up in queue' : 'Clear the filter/search to reorder'}
-              >↑</button>
-              <button
-                className="btn btn-sm btn-ghost"
-                disabled={!reorderable || idx === visible.length - 1}
-                onClick={() => move(o, 'down')}
-                title={reorderable ? 'Move down in queue' : 'Clear the filter/search to reorder'}
-              >↓</button>
-              {o.trackingNumber && (
-                <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)}>🌐 USPS</button>
-              )}
+              </div>
             </div>
 
-            {/* Breaks + teams */}
+            {/* Expanded detail: secondary actions + per-team pick checkboxes */}
             {isExpanded && (
-              <div style={{ marginTop: 10 }}>
+              <div className="order-row-detail">
+                <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? '▶ Resume' : '⏸ Hold'}</button>
+                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filter/search to reorder'}>↑</button>
+                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === visible.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filter/search to reorder'}>↓</button>
+                  {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)}>🌐 USPS</button>}
+                </div>
                 {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
                 {o.breaks.map((b) => (
                   <div key={b.breakNumber} className="break-group">

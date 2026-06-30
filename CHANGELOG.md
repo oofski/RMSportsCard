@@ -6,7 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.2.0] - 2026-06-30
+## [1.3.0] - 2026-06-30
+
+### Changed — navigation
+- Moved the top tab bar to a **collapsible left sidebar**. Click « / » to collapse
+  it to an icon-only rail (or expand it back); the choice is remembered between
+  sessions. Account actions (Upload New PDF, theme, Settings, Users, Sign out,
+  version) now live in the sidebar footer.
+
+### Changed — Planner
+- Reworked the order queue into a **simpler, scannable list**. Each order is now a
+  compact row — status pill, customer, breaks/picked-progress/tracking at a glance,
+  one **✓ Done →** button, and a compact stage dropdown — instead of a card full of
+  buttons. Hold/resume, reorder, USPS, and the per-team pick checkboxes moved into a
+  per-row ▾ expander. All previous behavior is preserved.
+
+### Notes
+- This release is UI-only; no API or data changes.
 
 ### Added
 - **Light / dark mode** toggle in the top bar, remembered between sessions.
