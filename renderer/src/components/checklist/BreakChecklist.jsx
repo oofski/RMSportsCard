@@ -198,14 +198,16 @@ export default function BreakChecklist({ currentUser }) {
     // 3) try to persist now.
     const ok = await flushSlot(slotId, next)
     if (ok) {
-      // If that drained the very last queued item, flash "Synced".
-      if (Object.keys(readPending()).length === 0 && syncState !== 'idle') {
-        setSyncState('synced')
+      // If that drained the very last queued item, flash "Synced". Use a
+      // functional update so a bulk loop (markAllPacked) doesn't read a stale
+      // syncState captured in this callback's closure.
+      if (Object.keys(readPending()).length === 0) {
+        setSyncState((cur) => (cur !== 'idle' ? 'synced' : cur))
       }
     } else {
       setSyncState('offline')
     }
-  }, [currentUser, flushSlot, syncState])
+  }, [currentUser, flushSlot])
 
   // -------------------------------------------------------------------------
   // Retry loop (§6.5): every RETRY_MS, attempt to flush every queued slot.

@@ -57,8 +57,10 @@ export default function ShippingTracker({ currentUser }) {
           api.getBatchUrls(),
         ])
         if (!alive) return
-        setShipments(shipmentList)
-        setBatchInfo(batches)
+        // Guard against an unexpected non-array payload so the render path
+        // (filter/map/reduce over the list) can never throw.
+        setShipments(Array.isArray(shipmentList) ? shipmentList : [])
+        setBatchInfo(batches && Array.isArray(batches.batches) ? batches : { totalPackages: 0, batches: [] })
       } catch (err) {
         if (!alive) return
         setLoadError(err.message || 'Failed to load shipments.')
@@ -127,10 +129,15 @@ export default function ShippingTracker({ currentUser }) {
   // server returns the canonical shipment view which we merge back on success.
   const applyOptimistic = useCallback(async (id, localPatch, apiCall, successToast) => {
     setActionError('')
-    const snapshot = shipments
-    // Optimistically update the row in place.
+    // Capture ONLY the affected row (functionally, so concurrent edits to other
+    // rows are never clobbered) and patch it in place.
+    let snapshotRow = null
     setShipments((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, ...localPatch } : s)),
+      prev.map((s) => {
+        if (s.id !== id) return s
+        snapshotRow = s
+        return { ...s, ...localPatch }
+      }),
     )
     try {
       const updated = await apiCall()
@@ -140,12 +147,12 @@ export default function ShippingTracker({ currentUser }) {
       }
       if (successToast) showToast(successToast)
     } catch (err) {
-      // Revert to the snapshot taken before the optimistic edit.
-      setShipments(snapshot)
+      // Revert ONLY this row to its pre-edit value; leave other rows untouched.
+      setShipments((prev) => prev.map((s) => (s.id === id && snapshotRow ? snapshotRow : s)))
       setActionError(err.message || 'Update failed — change reverted.')
       showToast('Update failed — reverted')
     }
-  }, [shipments, showToast])
+  }, [showToast])
 
   // ---- Row callbacks -------------------------------------------------------
   const handleToggle = useCallback((id) => {
@@ -160,7 +167,7 @@ export default function ShippingTracker({ currentUser }) {
         manualStatus: {
           code,
           setAt: new Date().toISOString(),
-          setBy: currentUser ? currentUser.handle || currentUser.realName : null,
+          setBy: currentUser ? currentUser.username || currentUser.displayName : null,
         },
         isException: !!statusByCode[code]?.isException,
       },
