@@ -155,9 +155,14 @@ export default function OrderQueue({ currentUser }) {
       } else if (res) {
         const read = res.read != null ? res.read : (res.updated || 0)
         const extra = (res.blocked ? ` · ${res.blocked} blocked` : '') + (res.failed ? ` · ${res.failed} unreadable` : '')
+        const checked = res.checked != null ? res.checked : (res.scanned || 0)
+        const activeTotal = res.activeTotal != null ? res.activeTotal : checked
+        const remainder = res.provider !== '17track' && activeTotal > checked
+          ? ` · ${activeTotal - checked} more on next auto-check`
+          : ''
         flash(read === 0 && (res.scanned || 0) > 0
           ? 'USPS read 0 statuses — add a 17TRACK key in Settings for reliable tracking'
-          : `Updated ${res.updated || 0} · read ${read}/${res.scanned || 0}${extra}`)
+          : `Updated ${res.updated || 0} · read ${read}/${res.scanned || 0}${extra}${remainder}`)
       }
       await load()
     } catch (err) {

@@ -297,10 +297,17 @@ export default function ShippingTracker({ currentUser }) {
         if (blocked) msg += ` · ${blocked} blocked`
         if (failed) msg += ` · ${failed} unreadable`
         showToast(msg)
+        // The keyless scraper only reads a safe batch per run (USPS blocks bulk
+        // checks). When more packages remain, say so plainly so it doesn't look
+        // like a failure — the rest are covered by the background auto-checks.
+        const checked = res.checked != null ? res.checked : (res.scanned || 0)
+        const activeTotal = res.activeTotal != null ? res.activeTotal : checked
         if (read === 0 && (res.scanned || 0) > 0) {
           setActionError(res.provider === '17track'
             ? 'No statuses could be read — check your 17TRACK API key in Settings.'
             : 'USPS blocked the automatic check (no statuses read). Add a free 17TRACK key in Settings for reliable status, or set statuses manually below.')
+        } else if (res.provider !== '17track' && activeTotal > checked) {
+          setActionError(`Checked the ${checked} packages most in need of an update. USPS limits how many it will report at once, so the remaining ${activeTotal - checked} update automatically on the next background checks — or add a free 17TRACK key (Settings) to update them all at once.`)
         }
       }
       const fresh = await api.getShipments()

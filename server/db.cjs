@@ -245,8 +245,70 @@ class Db {
       isException: EXCEPTION_CODES.includes((sh.manualStatus && sh.manualStatus.code) || 'not_shipped'),
       notes: sh.notes || null,
       lastUpdated: sh.lastUpdated || null,
+      lastCheckedAt: sh.lastCheckedAt || null,
       breaks,
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tracking rotation — pick which shipments a single auto-check run should read.
+  // -----------------------------------------------------------------------------
+  // USPS rate-limits the keyless scraper: after ~20 lookups in one session it
+  // starts serving bot challenges, so a 100-package event can never finish in one
+  // pass. The fix is to read a SMALL batch of the STALEST non-final packages per
+  // run and rotate — the background auto-refresh then covers everyone over a few
+  // cycles without tripping the block. Delivered/returned packages are skipped
+  // (their status is final, so re-checking them just wastes the budget).
+  // ---------------------------------------------------------------------------
+  /** Non-final shipments that still have a tracking number (the work set). */
+  _activeTrackingShipments() {
+    const FINAL = ['delivered', 'returned']
+    return this.store.state.shipments.filter((sh) => {
+      if (!sh.trackingNumber) return false
+      const code = (sh.manualStatus && sh.manualStatus.code) || 'not_shipped'
+      return !FINAL.includes(code)
+    })
+  }
+
+  /** Count of packages still worth auto-checking (for "checked N of M" messaging). */
+  activeTrackingCount() {
+    return this._activeTrackingShipments().length
+  }
+
+  /**
+   * The next batch to auto-check: the least-recently-checked active shipments,
+   * capped to `limit` (0 / falsy = all). Never-checked rows sort first, so a
+   * fresh import is covered before anything is re-checked.
+   * @returns {Array<{id:string, trackingNumber:string}>}
+   */
+  shipmentsForTracking({ limit = 0 } = {}) {
+    const active = this._activeTrackingShipments().slice().sort((a, b) => {
+      const ta = a.lastCheckedAt ? Date.parse(a.lastCheckedAt) : 0
+      const tb = b.lastCheckedAt ? Date.parse(b.lastCheckedAt) : 0
+      return ta - tb
+    })
+    const picked = limit && limit > 0 ? active.slice(0, limit) : active
+    return picked.map((sh) => ({ id: sh.id, trackingNumber: sh.trackingNumber }))
+  }
+
+  /**
+   * Stamp lastCheckedAt on every shipment we just ATTEMPTED (read, blocked, or
+   * failed) so the rotation advances even when USPS blocked the read. Called by
+   * the Electron main process right after a provider run.
+   */
+  markShipmentsChecked(trackingNumbers) {
+    const set = new Set(trackingNumbers || [])
+    if (set.size === 0) return 0
+    const ts = now()
+    let n = 0
+    for (const sh of this.store.state.shipments) {
+      if (sh.trackingNumber && set.has(sh.trackingNumber)) {
+        sh.lastCheckedAt = ts
+        n += 1
+      }
+    }
+    if (n) this.store.saveNow()
+    return n
   }
 
   updateShipment(shipmentId, { manualStatus, notes }, user) {

@@ -6,6 +6,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.7] - 2026-06-30
+
+### Fixed — USPS auto-check no longer stalls after the first ~20 packages
+USPS rate-limits the keyless scraper: after roughly 20 lookups in one session it
+starts serving bot-challenge pages, so a big event would update the first ~20 and
+then keep "checking" without updating the rest. The scraper now works *with* that
+limit instead of against it:
+- **Stale-first rotation.** Each scraper run reads a safe batch (16) of the
+  packages **most in need of an update** (least-recently-checked first), then the
+  background auto-checks rotate through the rest over the next runs — so every
+  package gets covered without tripping the block.
+- **Final packages are skipped.** Delivered/returned packages aren't re-checked,
+  so the budget goes to packages whose status can still change.
+- **Honest messaging.** A refresh now says e.g. "Checked the 16 most in need of an
+  update … the remaining N update automatically on the next background checks" so
+  a partial batch reads as expected progress, not a failure.
+- **17TRACK is unaffected** by the cap — with a free key, every package updates in
+  one pass (no scraping, no block). This remains the recommended setup for large
+  events.
+
 ## [1.5.6] - 2026-06-30
 
 ### Fixed / Added — shipping status now updates the board LIVE

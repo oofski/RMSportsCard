@@ -122,6 +122,12 @@ ipcMain.handle('updates:install', () => quitAndInstall())
 //   - 'scrape' (default): best-effort hidden-window scrape of USPS
 // Writes back changed statuses and returns HONEST stats so the UI can tell
 // "updated" from "couldn't read / blocked" (the old code always said "0 updated").
+// Max packages the keyless USPS scraper reads per run. USPS/Akamai starts
+// serving bot challenges after ~20 sequential lookups in one session, so we stay
+// safely under that and let the background auto-refresh rotate through the rest
+// over successive runs. (17TRACK is an API and is NOT subject to this cap.)
+const SCRAPE_BATCH_LIMIT = 16
+
 // Guards against overlapping runs (a manual click landing mid-background-run, or
 // two background ticks stacking). A single in-flight refresh is shared so the UI
 // and the timer never double-scrape the same packages at once.
@@ -139,15 +145,26 @@ async function runTrackingRefresh(source = 'manual') {
   if (trackingRefreshInFlight) return trackingRefreshInFlight
 
   trackingRefreshInFlight = (async () => {
-    const shipments = backend.db.listShipments()
     const cfg = backend.db.getTrackingConfig() // { provider, apiKey, autoRefreshMinutes }
+    const use17track = cfg.provider === '17track' && !!cfg.apiKey
+
+    // Pick the work set. 17TRACK is an API (no bot-wall) so it can read every
+    // active package at once; the keyless USPS scraper gets blocked after a
+    // ~20-lookup burst, so it reads only the STALEST batch and the background
+    // auto-refresh rotates through the rest over subsequent runs. Final
+    // (delivered/returned) packages are skipped either way.
+    const activeTotal = backend.db.activeTrackingCount()
+    const limit = use17track ? 0 : SCRAPE_BATCH_LIMIT
+    const shipments = backend.db.shipmentsForTracking({ limit })
+    const attempted = shipments.map((s) => s.trackingNumber)
+
     const onProgress = (p) => {
       if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
     }
 
     let result
     try {
-      if (cfg.provider === '17track' && cfg.apiKey) {
+      if (use17track) {
         result = await fetch17TrackStatuses({ shipments, onProgress, apiKey: cfg.apiKey })
       } else {
         result = await scrapeTracking({ shipments, onProgress })
@@ -158,9 +175,23 @@ async function runTrackingRefresh(source = 'manual') {
 
     const map = (result && result.map) || {}
     const stats = (result && result.stats) || { scanned: shipments.length, read: 0, blocked: 0, failed: 0 }
-    const by = cfg.provider === '17track' ? '17track' : 'usps'
+    const by = use17track ? '17track' : 'usps'
     const upd = backend.db.bulkSetShipmentStatusByTracking(map, { by })
-    const payload = { provider: cfg.provider, updated: upd.updated, lastTrackingSyncAt: upd.lastTrackingSyncAt, source, ...stats }
+    // Stamp every package we ATTEMPTED (read/blocked/failed) so the rotation
+    // advances next run even for the ones USPS blocked.
+    backend.db.markShipmentsChecked(attempted)
+    const payload = {
+      provider: cfg.provider,
+      updated: upd.updated,
+      lastTrackingSyncAt: upd.lastTrackingSyncAt,
+      source,
+      // `checked` = this run's batch; `activeTotal` = all packages still worth
+      // checking. When checked < activeTotal the UI explains the rest will catch
+      // up on the next auto-check (or via a 17TRACK key).
+      checked: shipments.length,
+      activeTotal,
+      ...stats,
+    }
     // Tell every renderer a sync just finished so it can reload the board live
     // (covers the background run, which no renderer is awaiting).
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-synced', payload)
