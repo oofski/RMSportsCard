@@ -261,26 +261,35 @@ class Db {
 
   /**
    * Auto-tracking: bulk-update statuses by tracking number (called by the
-   * Electron main process after scraping the USPS pages). Only writes when the
-   * code actually changed, and stamps setBy='auto' so it's distinguishable from
-   * a manual edit. Manual edits are never silently lost on a no-change scan.
+   * Electron main process after a provider lookup). Writes only when the code
+   * changed AND the current status was NOT set by a human — enforcing the spec's
+   * "manual status is truth" rule (§13): an automatic scan must never overwrite a
+   * status an operator deliberately set. Auto may update statuses that are unset
+   * or were themselves set automatically. Stamps setBy ('auto' | '17track').
    * @param {Record<string,string>} map trackingNumber -> status code
    */
   bulkSetShipmentStatusByTracking(map, { by = 'auto' } = {}) {
     const s = this.store.state
+    const AUTO_SETTERS = ['auto', '17track'] // markers for an automatic (non-human) write
     let updated = 0
-    const unchanged = []
+    let unchanged = 0
+    let kept = 0 // manual statuses intentionally left untouched
     for (const sh of s.shipments) {
       const code = map && map[sh.trackingNumber]
       if (!code) continue
       if (!VALID_SHIPMENT_CODES.includes(code)) continue
-      if ((sh.manualStatus && sh.manualStatus.code) === code) { unchanged.push(sh.trackingNumber); continue }
+      const cur = sh.manualStatus || {}
+      if (cur.code === code) { unchanged += 1; continue }
+      // Manual is truth: skip rows a real user set (setBy is a username, not an
+      // auto marker). Unset (null) or auto-set rows are fair game to update.
+      const humanSet = cur.setBy && !AUTO_SETTERS.includes(cur.setBy)
+      if (humanSet) { kept += 1; continue }
       sh.manualStatus = { code, setAt: now(), setBy: by }
       sh.lastUpdated = now()
       updated += 1
     }
     if (updated) this.store.saveNow()
-    return { updated, matched: Object.keys(map || {}).length, unchanged: unchanged.length }
+    return { updated, matched: Object.keys(map || {}).length, unchanged, kept }
   }
 
   // ---------------------------------------------------------------------------

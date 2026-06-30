@@ -137,7 +137,7 @@ function demoDataset() {
     serviceType: c.service,
     weightOz: c.weightOz,
     uspsUrl: buildUspsUrl(c.tracking),
-    manualStatus: { code: STATUS_CYCLE[i % STATUS_CYCLE.length], setAt: nowIso, setBy: 'demo' },
+    manualStatus: { code: STATUS_CYCLE[i % STATUS_CYCLE.length], setAt: nowIso, setBy: 'auto' },
     notes: STATUS_CYCLE[i % STATUS_CYCLE.length] === 'exception' ? 'Address issue — called customer.' : null,
     lastUpdated: nowIso,
   }))
