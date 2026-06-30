@@ -31,7 +31,7 @@ export default function App() {
   const [needsBootstrap, setNeedsBootstrap] = useState(false)
   const [user, setUser] = useState(null)
   const [hasData, setHasData] = useState(false)
-  const [tab, setTab] = useState('planner') // planner | checker | shipping | overview
+  const [tab, setTab] = useState('planner') // planner | checker | shipping | whatnot | sales | overview
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [usersOpen, setUsersOpen] = useState(false)
   const [appVersion, setAppVersion] = useState('1.0.0')

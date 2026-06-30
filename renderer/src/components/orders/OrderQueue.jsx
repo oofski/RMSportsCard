@@ -14,7 +14,7 @@
 // delivery status and advances Sent/All Good automatically.
 // =============================================================================
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as api from '../../api.js'
 import { PIPELINE_STAGES, stageByCode } from '../../constants.js'
 
@@ -51,10 +51,14 @@ export default function OrderQueue({ currentUser }) {
 
   useEffect(() => { load() }, [load])
 
+  const toastTimer = useRef(null)
   const flash = useCallback((msg) => {
     setToast(msg)
-    setTimeout(() => setToast(''), 2200)
+    if (toastTimer.current) clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 2200)
   }, [])
+  // Clear any pending toast timer on unmount (e.g. switching tabs).
+  useEffect(() => () => { if (toastTimer.current) clearTimeout(toastTimer.current) }, [])
 
   // ---- Replace a single order row in local state (after a mutation) --------
   const replaceRow = useCallback((row) => {
@@ -198,6 +202,9 @@ export default function OrderQueue({ currentUser }) {
     { key: 'held', label: '⏸ Held' },
   ]
 
+  // Manual reordering is only coherent when the displayed list == the full queue.
+  const reorderable = filter === 'all' && !search.trim()
+
   return (
     <div className="col" style={{ gap: 14 }}>
       {/* Toolbar */}
@@ -306,8 +313,21 @@ export default function OrderQueue({ currentUser }) {
               <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>
                 {o.onHold ? '▶ Resume' : '⏸ Hold'}
               </button>
-              <button className="btn btn-sm btn-ghost" disabled={idx === 0} onClick={() => move(o, 'up')} title="Move up in queue">↑</button>
-              <button className="btn btn-sm btn-ghost" disabled={idx === visible.length - 1} onClick={() => move(o, 'down')} title="Move down in queue">↓</button>
+              {/* Reordering only makes sense against the full queue — disable it
+                  while a filter/search is active so the displayed index matches
+                  the real queue position the backend swaps against. */}
+              <button
+                className="btn btn-sm btn-ghost"
+                disabled={!reorderable || idx === 0}
+                onClick={() => move(o, 'up')}
+                title={reorderable ? 'Move up in queue' : 'Clear the filter/search to reorder'}
+              >↑</button>
+              <button
+                className="btn btn-sm btn-ghost"
+                disabled={!reorderable || idx === visible.length - 1}
+                onClick={() => move(o, 'down')}
+                title={reorderable ? 'Move down in queue' : 'Clear the filter/search to reorder'}
+              >↓</button>
               {o.trackingNumber && (
                 <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)}>🌐 USPS</button>
               )}
