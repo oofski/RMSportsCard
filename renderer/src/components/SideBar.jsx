@@ -21,6 +21,7 @@ const NAV = [
   { key: 'shipping', icon: '🚚', label: 'Shipping Tracker' },
   { key: 'whatnot', icon: '🧾', label: 'Whatnot Orders' },
   { key: 'sales', icon: '💰', label: 'Sales Dashboard' },
+  { key: 'history', icon: '🗄', label: 'History' },
   { key: 'overview', icon: '📊', label: 'Overview' },
 ]
 

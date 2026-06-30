@@ -21,6 +21,7 @@ const parseRoutes = require('./routes/parse.routes.cjs')
 const breakRoutes = require('./routes/breaks.routes.cjs')
 const orderRoutes = require('./routes/orders.routes.cjs')
 const whatnotRoutes = require('./routes/whatnot.routes.cjs')
+const historyRoutes = require('./routes/history.routes.cjs')
 const shipmentRoutes = require('./routes/shipments.routes.cjs')
 const dashboardRoutes = require('./routes/dashboard.routes.cjs')
 
@@ -68,6 +69,7 @@ function createApp({ dataDir }) {
   app.use('/api', breakRoutes(ctx))
   app.use('/api', orderRoutes(ctx))
   app.use('/api', whatnotRoutes(ctx))
+  app.use('/api', historyRoutes(ctx))
   app.use('/api', shipmentRoutes(ctx))
   app.use('/api', dashboardRoutes(ctx))
 

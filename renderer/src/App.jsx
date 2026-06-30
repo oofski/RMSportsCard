@@ -24,6 +24,7 @@ import BreakChecklist from './components/checklist/BreakChecklist.jsx'
 import ShippingTracker from './components/shipping/ShippingTracker.jsx'
 import WhatnotOrders from './components/whatnot/WhatnotOrders.jsx'
 import SalesDashboard from './components/whatnot/SalesDashboard.jsx'
+import History from './components/history/History.jsx'
 import SettingsModal from './components/SettingsModal.jsx'
 import UserManager from './components/UserManager.jsx'
 
@@ -175,6 +176,7 @@ export default function App() {
             {tab === 'shipping' && <ShippingTracker currentUser={user} />}
             {tab === 'whatnot' && <WhatnotOrders currentUser={user} />}
             {tab === 'sales' && <SalesDashboard currentUser={user} />}
+            {tab === 'history' && <History currentUser={user} />}
           </div>
         </main>
       </div>

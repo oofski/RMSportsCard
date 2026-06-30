@@ -33,6 +33,9 @@ function emptyState() {
     batchUrls: [],
     parseJobs: {},
     warnings: [],
+    // Saved daily snapshots of order + shipping data (History tab). Persist
+    // across PDF re-imports, like the user table.
+    snapshots: [],
   }
 }
 

@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-06-30
+
+### Added
+- New **History** tab: save a dated snapshot of the current event's order +
+  shipping data so you can go back and check it later, and **export to CSV on
+  disk** (native Save dialog in the desktop app). Two exports per source —
+  Orders and USPS Shipping — for either the live data or any saved snapshot.
+  Snapshots persist across PDF re-imports.
+
 ## [1.5.0] - 2026-06-30
 
 ### Fixed / Added — USPS auto-tracking (it now actually works)

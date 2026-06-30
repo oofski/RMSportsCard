@@ -16,6 +16,7 @@
 
 const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('node:path')
+const fs = require('node:fs')
 const { startServer } = require('../server/index.cjs')
 const { initAutoUpdate, checkForUpdatesManually, quitAndInstall } = require('./updater.cjs')
 const { scrapeTracking } = require('./tracking.cjs')
@@ -97,6 +98,20 @@ ipcMain.handle('open-external-batch', async (_event, urls) => {
 })
 
 ipcMain.handle('app-version', () => app.getVersion())
+
+// Save text content (e.g. a CSV export) to disk via the native Save dialog.
+ipcMain.handle('file:save', async (_event, { defaultName, content } = {}) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName || 'export.csv',
+    filters: [
+      { name: 'CSV', extensions: ['csv'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  })
+  if (canceled || !filePath) return { saved: false }
+  await fs.promises.writeFile(filePath, content != null ? String(content) : '', 'utf8')
+  return { saved: true, path: filePath }
+})
 
 // Auto-update controls invoked from the renderer's update banner.
 ipcMain.handle('updates:check', () => checkForUpdatesManually())

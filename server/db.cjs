@@ -22,6 +22,7 @@
 
 const crypto = require('node:crypto')
 const reference = require('../shared/reference.json')
+const { ordersCsv, shippingCsv } = require('./csv.cjs')
 
 const VALID_SHIPMENT_CODES = reference.shipmentStatuses.map((s) => s.code)
 const EXCEPTION_CODES = reference.shipmentStatuses.filter((s) => s.isException).map((s) => s.code)
@@ -601,6 +602,81 @@ class Db {
   // ---------------------------------------------------------------------------
   // Settings
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // History — daily snapshots of order + shipping data, and CSV export
+  // ---------------------------------------------------------------------------
+  /** Capture the current event's orders + shipments as a dated snapshot. */
+  saveSnapshot(label, user) {
+    const s = this.store.state
+    const snapshot = {
+      id: `snap_${crypto.randomBytes(5).toString('hex')}`,
+      label: (label && String(label).trim()) || s.meta.event.name || 'Snapshot',
+      savedAt: now(),
+      savedBy: (user && user.username) || null,
+      event: { name: s.meta.event.name, date: s.meta.event.date },
+      orders: this.listWhatnotOrders(), // line items at this moment
+      shipments: this.listShipments(), // statuses + breaks at this moment
+      sales: this.getSalesDashboard(), // summary numbers
+    }
+    s.snapshots.unshift(snapshot)
+    this.store.saveNow()
+    return this._snapshotMeta(snapshot)
+  }
+
+  _snapshotMeta(snap) {
+    return {
+      id: snap.id,
+      label: snap.label,
+      savedAt: snap.savedAt,
+      savedBy: snap.savedBy || null,
+      eventName: (snap.event && snap.event.name) || null,
+      eventDate: (snap.event && snap.event.date) || null,
+      orders: (snap.orders || []).length,
+      shipments: (snap.shipments || []).length,
+      revenue: (snap.sales && snap.sales.totalRevenue) || 0,
+    }
+  }
+
+  listSnapshots() {
+    return this.store.state.snapshots.map((snap) => this._snapshotMeta(snap))
+  }
+
+  getSnapshot(id) {
+    return this.store.state.snapshots.find((x) => x.id === id) || null
+  }
+
+  deleteSnapshot(id) {
+    const s = this.store.state
+    const idx = s.snapshots.findIndex((x) => x.id === id)
+    if (idx === -1) return { ok: false }
+    s.snapshots.splice(idx, 1)
+    this.store.saveNow()
+    return { ok: true }
+  }
+
+  /**
+   * Build a CSV export for a snapshot (by id) or for the CURRENT live data.
+   * @param {'orders'|'shipping'} kind
+   * @param {string} [snapshotId]
+   * @returns {{ filename: string, csv: string } | null}
+   */
+  exportCsv(kind, snapshotId) {
+    let src
+    let dateTag
+    if (snapshotId) {
+      const snap = this.getSnapshot(snapshotId)
+      if (!snap) return null
+      src = { event: snap.event, orders: snap.orders, shipments: snap.shipments }
+      dateTag = (snap.savedAt || now()).slice(0, 10)
+    } else {
+      src = { event: this.store.state.meta.event, orders: this.listWhatnotOrders(), shipments: this.listShipments() }
+      dateTag = now().slice(0, 10)
+    }
+    if (kind === 'orders') return { filename: `rmcardz-orders-${dateTag}.csv`, csv: ordersCsv(src) }
+    if (kind === 'shipping') return { filename: `rmcardz-shipping-${dateTag}.csv`, csv: shippingCsv(src) }
+    return null
+  }
+
   getSettings() {
     const s = this.store.state
     return {

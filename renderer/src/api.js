@@ -84,6 +84,30 @@ export const resetQueue = () => request('/api/orders/reset-queue', { method: 'PO
 export const getWhatnotOrders = () => request('/api/whatnot-orders')
 export const getSales = () => request('/api/sales')
 
+// ---- History (daily snapshots) + CSV export -------------------------------
+export const saveSnapshot = (label) => request('/api/snapshots', { method: 'POST', body: { label } })
+export const listSnapshots = () => request('/api/snapshots')
+export const deleteSnapshot = (id) => request(`/api/snapshots/${id}`, { method: 'DELETE' })
+export const exportData = (kind, snapshotId) =>
+  request(`/api/export/${kind}${snapshotId ? `?snapshot=${encodeURIComponent(snapshotId)}` : ''}`)
+
+// Save CSV text to disk: native Save dialog on desktop, browser download in a browser.
+export async function saveCsvToDisk(filename, csv) {
+  if (window.rmcardz && window.rmcardz.saveFile) {
+    return window.rmcardz.saveFile({ defaultName: filename, content: csv })
+  }
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
+  return { saved: true, browser: true }
+}
+
 // ---- Dashboard / settings -------------------------------------------------
 export const getDashboard = () => request('/api/dashboard')
 export const getSettings = () => request('/api/settings')

@@ -32,6 +32,10 @@ contextBridge.exposeInMainWorld('rmcardz', {
   /** The installed application version (from package.json). */
   getAppVersion: () => ipcRenderer.invoke('app-version'),
 
+  /** Save text content to disk via a native Save dialog. Resolves to
+   *  { saved, path } (saved:false if the user cancelled). */
+  saveFile: (payload) => ipcRenderer.invoke('file:save', payload),
+
   // ---- Automatic USPS status -------------------------------------------------
   /** Scrape USPS for every shipment and auto-update statuses. Resolves to
    *  { updated, matched, scanned }. */
