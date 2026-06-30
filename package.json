@@ -1,7 +1,7 @@
 {
   "name": "rm-cardz",
   "productName": "RM Cardz",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "RM Cardz — Break Manager & Shipping Tracker. Desktop app for NFL sports-card break fulfillment: parse Whatnot PDFs, run pick-and-pack checklists, and track USPS shipments.",
   "author": {
     "name": "rm_cardz",
@@ -16,7 +16,7 @@
     "dev": "concurrently -k -n RENDERER,ELECTRON -c blue,green \"npm:dev:renderer\" \"npm:dev:electron\"",
     "build:renderer": "vite build",
     "start": "electron .",
-    "pack:win": "npm run build:renderer && electron-packager . \"RM Cardz\" --platform=win32 --arch=x64 --out=release --overwrite --app-version=1.0.0 --ignore=\"^/(renderer/src|test|release)\" --prune=true",
+    "pack:win": "npm run build:renderer && electron-packager . \"RM Cardz\" --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/(renderer/src|test|release|dist)\" --prune=true",
     "dist:win": "npm run build:renderer && electron-builder --win --publish never",
     "dist:win:publish": "npm run build:renderer && electron-builder --win --publish always",
     "test": "vitest run",

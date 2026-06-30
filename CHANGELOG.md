@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-06-30
+
+### Fixed
+- `pack:win` no longer hard-codes `--app-version=1.0.0` — the packaged build now
+  takes its version from package.json, so the no-wine path stamps the correct
+  version.
+- `pack:win` now ignores `dist/` so the bundled installers aren't packed into
+  the app payload.
+
+### Build
+- Republished the downloadable Windows installer as
+  `dist/RM-Cardz-Setup-1.1.1.exe` (carries all v1.1.0 features).
+
 ## [1.1.0] - 2026-06-30
 
 Reworks fulfillment around the order, adds a planner/checker split, and makes
