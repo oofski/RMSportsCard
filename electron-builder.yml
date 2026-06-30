@@ -43,11 +43,13 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: RM Cardz
-  # Distinct names so the installer and the portable build never collide.
-  artifactName: "${productName}-Setup-${version}.${ext}"
+  # Hyphenated literal (not ${productName}, which has a space) so the filename in
+  # latest.yml matches the committed /dist file exactly under the generic feed —
+  # the generic provider does NOT sanitize spaces to hyphens the way github did.
+  artifactName: "RM-Cardz-Setup-${version}.${ext}"
 
 portable:
-  artifactName: "${productName}-Portable-${version}.${ext}"
+  artifactName: "RM-Cardz-Portable-${version}.${ext}"
 
 # Auto-update feed.
 # -----------------------------------------------------------------------------
