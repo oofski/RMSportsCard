@@ -49,11 +49,17 @@ nsis:
 portable:
   artifactName: "${productName}-Portable-${version}.${ext}"
 
-# Auto-update feed. electron-updater reads this block to know where to look for
-# newer releases. Point `owner`/`repo` at the GitHub repository that hosts the
-# published Releases. Publishing requires GH_TOKEN to be set in the build env.
+# Auto-update feed.
+# -----------------------------------------------------------------------------
+# Previously this pointed at GitHub *Releases* (provider: github), but no
+# Releases are ever published from our build environment (git tag/release pushes
+# are blocked) — so the updater had nothing to find and never updated.
+#
+# Instead we publish each release's installer + latest.yml into the repo's
+# committed /dist folder and serve that folder over the GitHub "raw" CDN as a
+# GENERIC feed. electron-updater fetches <url>/latest.yml, compares the version,
+# downloads the matching installer from the same folder, and verifies its
+# sha512. This needs no GitHub Release and no token (the repo is public).
 publish:
-  provider: github
-  owner: oofski
-  repo: rmsportscard
-  releaseType: release
+  provider: generic
+  url: https://raw.githubusercontent.com/oofski/RMSportsCard/claude/pensive-brahmagupta-v0gvp5/dist

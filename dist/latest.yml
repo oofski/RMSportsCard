@@ -1,8 +1,8 @@
-version: 1.3.0
+version: 1.3.1
 files:
-  - url: RM-Cardz-Setup-1.3.0.exe
-    sha512: CUmIA0iuVDJQk1XacLUJN3aBCrEWzD5g+0b2WekWR4L+AF4snY3Z93Aw/9R8baIStfARfu9pqKr+4UTxGhZQMA==
-    size: 104493350
-path: RM-Cardz-Setup-1.3.0.exe
-sha512: CUmIA0iuVDJQk1XacLUJN3aBCrEWzD5g+0b2WekWR4L+AF4snY3Z93Aw/9R8baIStfARfu9pqKr+4UTxGhZQMA==
-releaseDate: '2026-06-30T11:40:08.573Z'
+  - url: RM Cardz-Setup-1.3.1.exe
+    sha512: Qc51ULI6/VoF0lhM7Kf0gfn0x7IuRxGI/J5DeemEyx9FXEVv6xNNZ3e9GPLkhYVUw8Xu/VuV9MxnYkEpC8yb5A==
+    size: 104493451
+path: RM Cardz-Setup-1.3.1.exe
+sha512: Qc51ULI6/VoF0lhM7Kf0gfn0x7IuRxGI/J5DeemEyx9FXEVv6xNNZ3e9GPLkhYVUw8Xu/VuV9MxnYkEpC8yb5A==
+releaseDate: '2026-06-30T12:25:38.096Z'

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-06-30
+
+### Fixed — auto-update
+- **Auto-update now has a feed.** The app was configured to check GitHub
+  *Releases*, but no Releases are ever published from the build environment
+  (tag/release pushes are blocked), so the updater had nothing to find. Switched
+  electron-updater to a **generic feed served from the committed `/dist` folder**
+  over the GitHub raw CDN — the same place each installer + `latest.yml` is
+  published. From this version on, installed apps will detect and download new
+  versions automatically. (Builds before 1.3.1 had the old, empty GitHub-Releases
+  feed embedded and won't self-update; install 1.3.1 once to get the working feed.)
+
 ## [1.3.0] - 2026-06-30
 
 ### Changed — navigation
