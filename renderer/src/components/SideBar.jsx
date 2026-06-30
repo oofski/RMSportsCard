@@ -13,7 +13,7 @@
 import React from 'react'
 
 // Nav model — split icon/label so the collapsed rail can render icons only.
-// NOTE: keys must stay stable; Dashboard.onGoTo() navigates by these keys.
+// Keys must match the render switch in App.jsx.
 const NAV = [
   { key: 'orders', icon: '📦', label: 'Orders' },
   { key: 'checker', icon: '✅', label: 'Checker' },

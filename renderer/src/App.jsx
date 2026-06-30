@@ -4,8 +4,9 @@
 // Orchestrates the top-level flow:
 //   1. Auth gate      -> first-run "create admin" or login (Login.jsx)
 //   2. Data gate      -> if no event is imported, show Upload (Upload.jsx)
-//   3. Main app       -> two-tab shell + overview (Dashboard / BreakChecklist /
-//                        ShippingTracker), plus Settings and User-management modals.
+//   3. Main app       -> left sidebar nav over the feature views (Orders /
+//                        Checker / Shipping / Sales / History), plus the
+//                        Settings and User-management modals.
 // The auto-update banner (UpdateBanner.jsx) sits above everything on desktop.
 // =============================================================================
 

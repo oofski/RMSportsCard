@@ -265,7 +265,13 @@ export default function OrderQueue({ currentUser }) {
         return (
           <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${isExpanded ? 'open' : ''}`}>
             {/* Collapsed row — tap anywhere to drop down the team checklist. */}
-            <div className="order-row-main" role="button" tabIndex={0} onClick={() => toggleExpand(o.id)}>
+            <div
+              className="order-row-main"
+              role="button"
+              tabIndex={0}
+              onClick={() => toggleExpand(o.id)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(o.id) } }}
+            >
               <span
                 className="order-status-pill"
                 style={{ '--pill': sd.color || '#9ca3af' }}
