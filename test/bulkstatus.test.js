@@ -93,4 +93,76 @@ describe('bulkSetShipmentStatusByTracking — manual is truth', () => {
     expect(after.manualStatus.code).toBe('in_transit') // not locked out by its own prior write
     expect(res.updated).toBe(1)
   })
+
+  // --- Hardening: a HUMAN-set carrier/terminal decision is never downgraded ---
+  // Only PRE-SHIP human rows (not_shipped/label_created) may be advanced. A human
+  // who set any carrier state must survive a scan reporting an EARLIER state.
+  it('does NOT pull a human-set in_transit BACKWARD to label_created', () => {
+    const ship = db.listShipments()[0]
+    db.updateShipment(ship.id, { manualStatus: 'in_transit' }, { username: 'bob' })
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'label_created' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('in_transit') // protected, not downgraded
+    expect(res.kept).toBe(1)
+    expect(res.updated).toBe(0)
+  })
+
+  it.each(['returned', 'exception', 'out_for_delivery'])(
+    'does NOT overwrite a human-set %s with a scan reporting in_transit',
+    (humanCode) => {
+      const ship = db.listShipments()[0]
+      db.updateShipment(ship.id, { manualStatus: humanCode }, { username: 'carol' })
+      const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+      const after = db.listShipments().find((s) => s.id === ship.id)
+      expect(after.manualStatus.code).toBe(humanCode)
+      expect(res.kept).toBe(1)
+    }
+  )
+
+  // --- Characterization: AUTO-over-AUTO trusts the LATEST scrape (incl. backward).
+  // This is intentional (the comment header: "a previous automatic write never
+  // blocks the next one"). The latest read of the live USPS page is authoritative
+  // for an auto-set row, so a corrected/regressed scan may move it either way.
+  // Locking it so any future change to this trade-off is a DELIBERATE one.
+  it('lets a later auto scan overwrite an earlier AUTO-set row, even backward', () => {
+    const ship = db.listShipments()[0]
+    db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'label_created' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('label_created') // auto trusts the latest auto read
+    expect(res.updated).toBe(1)
+  })
+
+  it('advances a human-set label_created (the other pre-ship code) forward on a scan', () => {
+    const ship = db.listShipments()[0]
+    db.updateShipment(ship.id, { manualStatus: 'label_created' }, { username: 'dave' })
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'out_for_delivery' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('out_for_delivery') // pre-ship -> carrier is allowed
+    expect(res.updated).toBe(1)
+  })
+
+  it("treats the legacy 'auto' and '17track' markers as auto-setters too", () => {
+    const ship = db.listShipments()[0]
+    // Simulate a row previously written by each legacy auto marker; a new scan
+    // must be free to advance it (none of them count as a human freeze).
+    for (const marker of ['auto', '17track']) {
+      db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'label_created' }, { by: marker })
+      const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'in_transit' }, { by: 'usps' })
+      expect(res.updated).toBe(1)
+      expect(db.listShipments().find((s) => s.id === ship.id).manualStatus.code).toBe('in_transit')
+    }
+  })
+
+  it('ignores unknown status codes and unmatched tracking numbers', () => {
+    const ship = db.listShipments()[0]
+    const before = ship.manualStatus.code
+    const res = db.bulkSetShipmentStatusByTracking(
+      { [ship.trackingNumber]: 'teleported', 'NO-SUCH-TRACKING': 'delivered' },
+      { by: 'usps' }
+    )
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe(before) // invalid code left the row untouched
+    expect(res.updated).toBe(0)
+  })
 })

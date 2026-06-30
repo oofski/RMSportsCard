@@ -68,4 +68,45 @@ describe('mapStatusText', () => {
     expect(mapStatusText('')).toBeNull()
     expect(mapStatusText('completely unrelated text')).toBeNull()
   })
+
+  // ---- Hardening: terminal precedence on the NEW joined multi-line text -------
+  // The probe now joins .tb-status + .tb-status-detail + .delivery_status with a
+  // newline, so several status phrases can co-occur. Lock that the terminal /
+  // problem states still beat the in-transit history that rides along.
+  it('keeps terminal precedence over in_transit history in a multi-line join', () => {
+    // returned is checked first and must win even with in-transit history present.
+    expect(mapStatusText('Returned to Sender\nIn Transit to Next Facility\nArrived')).toBe('returned')
+    // delivered beats out_for_delivery + in_transit history.
+    expect(mapStatusText('Delivered, In/At Mailbox\nOut for Delivery\nArrived at Facility')).toBe('delivered')
+    // a real exception phrase ("delivery exception") beats out_for_delivery (it
+    // is checked BEFORE out_for_delivery in mapStatusText).
+    expect(mapStatusText('Delivery exception, no access to delivery location\nOut for Delivery')).toBe('exception')
+  })
+
+  it('out for delivery still wins over a bare "arrived" in_transit history', () => {
+    expect(mapStatusText('Out for Delivery\nArrived at USPS Facility')).toBe('out_for_delivery')
+    expect(mapStatusText('Out for Delivery\nIn Transit to Next Facility')).toBe('out_for_delivery')
+  })
+
+  it('does not let the "to/will be delivered" strip eat a real Out for Delivery', () => {
+    // The new strip rule removes promise copy ("on track to be delivered"); it
+    // must not swallow an actual "Out for Delivery" banner sitting on the line.
+    expect(mapStatusText('Out for Delivery, on track to be delivered by 9:00pm')).toBe('out_for_delivery')
+    // And a genuine Delivered confirmation joined after a "will be delivered" promise still maps delivered.
+    expect(mapStatusText('Your package will be delivered today\nDelivered, In/At Mailbox')).toBe('delivered')
+  })
+
+  it('maps the widened bare in_transit verbs (arrived / departed / shipment received / forwarded)', () => {
+    expect(mapStatusText('Arrived')).toBe('in_transit')
+    expect(mapStatusText('Departed')).toBe('in_transit')
+    expect(mapStatusText('Shipment Received')).toBe('in_transit')
+    expect(mapStatusText('Package Received')).toBe('in_transit')
+    expect(mapStatusText('Forwarded')).toBe('in_transit')
+  })
+
+  it('a delivery-date headline joined with a label_created detail still maps label_created', () => {
+    // The headline carries "Expected Delivery ..." (stripped per-line) while the
+    // real state lives in the detail node; the newline join keeps them separate.
+    expect(mapStatusText('Expected Delivery Fri\nShipping Label Created, USPS Awaiting Item')).toBe('label_created')
+  })
 })

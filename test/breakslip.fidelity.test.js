@@ -242,4 +242,192 @@ Total: $20.00`,
     expect(single.cardCount).toBe(1)
     expect(single.multiCard).toBe(false)
   })
+
+  it('flags multiCard for ONE card in each of TWO breaks (spread across breaks)', () => {
+    const PAGES = [
+      `Whatnot - Breaking Slip
+User
+Spread Buyer (spread)
+#40 #41
+2 Breaks
+Break #1
+Orders: #40
+__ Buffalo Bills
+Break #4
+Orders: #41
+__ Miami Dolphins
+Total: $40.00`,
+    ]
+    const db = importPagesToDb(PAGES)
+    const o = db.listOrders().find((x) => x.customerId === 'spread')
+    expect(o.cardCount).toBe(2)
+    expect(o.breakCount).toBe(2)
+    expect(o.multiCard).toBe(true) // two single-team breaks is still multi-card
+  })
+})
+
+// ---- Hardening: header / fallback / audit-rollup edge cases the suite missed --
+describe('breaking-slip header + fallback hardening', () => {
+  it('accepts the dash-less "Whatnot Break Slip" header as ground truth', () => {
+    const page = `Whatnot Break Slip
+User
+No Dash (nodash)
+#50
+1 Breaks
+Break #1
+Orders: #50
+__ Buffalo Bills
+Total: $20.00`
+    const ds = parsePages([page])
+    expect(slotsFor(ds, 'nodash').map((s) => s.teamName)).toEqual(['Buffalo Bills'])
+  })
+
+  it('the no-checkbox fallback recovers teams across MULTIPLE breaks at once', () => {
+    const page = `Whatnot - Breaking Slip
+User
+Multi NoCB (multinocb)
+#51 #52
+2 Breaks
+Break #1
+Orders: #51
+Buffalo Bills
+New York Jets
+Break #4
+Orders: #52
+Miami Dolphins
+Total: $60.00`
+    const ds = parsePages([page])
+    const byBreak = {}
+    slotsFor(ds, 'multinocb').forEach((s) => { byBreak[s.breakNumber] = (byBreak[s.breakNumber] || []).concat(s.teamName) })
+    expect(byBreak[1].sort()).toEqual(['Buffalo Bills', 'New York Jets'])
+    expect(byBreak[4]).toEqual(['Miami Dolphins'])
+  })
+
+  it('a near-miss NON-team line is NOT promoted to a slot by the fallback', () => {
+    // Real team lines have no checkbox here; the surrounding free text ("Thank
+    // you...", "Please leave a review") must NOT resolve to a team and become a
+    // phantom slot — only matchTeam() hits (edit-distance <= 2) are recovered.
+    const page = `Whatnot - Breaking Slip
+User
+Near Miss (nearmiss)
+#53
+1 Breaks
+Break #1
+Orders: #53
+Dallas Cowboys
+Thank you for your order
+Please leave a review
+Total: $20.00`
+    const ds = parsePages([page])
+    expect(slotsFor(ds, 'nearmiss').map((s) => s.teamName)).toEqual(['Dallas Cowboys'])
+  })
+})
+
+describe('breakAudit roll-ups through the db (listBreaks + summary)', () => {
+  function importPagesToDb(pages) {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmcardz-audit-'))
+    const db = new Db(new Store(dir))
+    db.importDataset(parsePages(pages))
+    return db
+  }
+
+  it('merges per-break audit (maxTeams/missingCount/hasAll32/collisions) into listBreaks', () => {
+    const PAGES = [
+      `Whatnot - Breaking Slip
+User
+Cust A (custa)
+#60
+1 Breaks
+Break #1
+Orders: #60
+__ Chicago Bears
+Total: $20.00`,
+      `Whatnot - Breaking Slip
+User
+Cust B (custb)
+#61
+1 Breaks
+Break #1
+Orders: #61
+__ Chicago Bears
+Total: $22.00`,
+    ]
+    const db = importPagesToDb(PAGES)
+    const b = db.listBreaks().find((x) => x.breakNumber === 1)
+    expect(b.maxTeams).toBe(32)
+    expect(b.hasAll32).toBe(false)
+    expect(b.missingCount).toBe(31)
+    // Collision across two CUSTOMERS in the same break is surfaced on the break row.
+    expect(b.collisions.map((c) => c.team)).toEqual(['Chicago Bears'])
+    expect(b.collisions[0].customers.sort()).toEqual(['custa', 'custb'])
+  })
+
+  it('summary() rolls up breaksMissingTeams + breakCollisions across customers', () => {
+    const PAGES = [
+      `Whatnot - Breaking Slip
+User
+Cust A (custa)
+#60
+1 Breaks
+Break #1
+Orders: #60
+__ Chicago Bears
+Total: $20.00`,
+      `Whatnot - Breaking Slip
+User
+Cust B (custb)
+#61
+1 Breaks
+Break #1
+Orders: #61
+__ Chicago Bears
+Total: $22.00`,
+    ]
+    const db = importPagesToDb(PAGES)
+    const sum = db.summary()
+    expect(sum.breakCollisions).toBe(1) // one colliding team across the two customers
+    expect(sum.breaksMissingTeams).toBe(1) // the single break is far short of 32
+  })
+
+  it('listBreaks degrades gracefully (null audit) for an import with no breakAudit', () => {
+    // Older datasets predate the audit; importDataset defaults breakAudit:[] so
+    // listBreaks must not crash and must report the null-audit sentinels.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmcardz-legacy-'))
+    const db = new Db(new Store(dir))
+    db.importDataset({
+      event: { name: 'Legacy', date: '2025-01-01' },
+      breaks: [{ id: 'break_1', breakNumber: 1, eventName: 'Legacy', eventDate: '2025-01-01', status: 'pending' }],
+      teamSlots: [], customers: [], shipments: [], orders: [], batchUrls: [], warnings: [],
+      // no breakAudit key at all
+    })
+    const b = db.listBreaks().find((x) => x.breakNumber === 1)
+    expect(b.maxTeams).toBe(32) // sentinel default
+    expect(b.missingCount).toBeNull()
+    expect(b.hasAll32).toBeNull()
+    expect(b.collisions).toEqual([])
+  })
+})
+
+describe('audit must NOT pollute warnings for partial-but-clean data', () => {
+  it('a break with far fewer than 32 teams and no duplicates yields zero warnings', () => {
+    // The 32-team audit reports missing teams as INFORMATIONAL (missingTeams),
+    // never as warnings — only a true collision warns. A partial breaking slip
+    // (the normal case) must stay warning-free so parser.test.js's clean-data
+    // invariant is not silently broken by the audit.
+    const page = `Whatnot - Breaking Slip
+User
+Partial Buyer (partial)
+#70
+1 Breaks
+Break #1
+Orders: #70
+__ Seattle Seahawks
+__ Dallas Cowboys
+Total: $50.00`
+    const ds = parsePages([page])
+    expect(ds.warnings).toEqual([])
+    const a = auditFor(ds, 1)
+    expect(a.missingCount).toBe(30)
+    expect(a.hasAll32).toBe(false)
+  })
 })
