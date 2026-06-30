@@ -6,6 +6,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.4] - 2026-06-30
+
+### Fixed — USPS auto-tracking: "in transit" no longer shows as "Not Shipped"
+A multi-agent investigation found packages that had actually shipped were stuck
+on **Not Shipped**, while label-created ones read correctly. Root causes, all
+fixed:
+- **Packing froze the status.** Marking an order picked/packed in the Orders
+  queue stamped a *human* "not shipped", and the "manual is truth" rule then
+  refused to let auto-tracking advance it. Now a genuine carrier scan may move a
+  **pre-ship** row (not shipped / label created) **forward** into a shipping
+  state — while a status you deliberately set (delivered, returned, exception)
+  stays protected.
+- **The scraper locked itself out.** The default USPS reader's own writes were
+  mistakenly treated as "manual", so it could only update a package once. Its
+  writes are now recognized as automatic.
+- **Modern USPS wording wasn't recognized.** "Arriving On Time / Late", "moving
+  within the USPS network", "Package received", "Forwarded" and similar now map
+  to In Transit; the "…on track to be delivered…" promise is no longer misread
+  as Delivered. The reader also now combines the status headline with its detail
+  line, so "In Transit" is caught even when the headline is just a delivery date.
+
+### Added / Fixed — Break Slip team fidelity + multi-card alarm
+- **No more silently lost teams.** The per-customer **Break Slip** is the ground
+  truth for which teams each customer won in which break. The parser is now
+  tolerant of real-world export variations — header wording ("Break Slip" vs
+  "Breaking Slip"), letter case, and the pick checkbox rendering as underscores,
+  a box glyph, or nothing at all — and will **recover a team by name** even when
+  its checkbox didn't survive the PDF text extraction. Customers in multiple
+  breaks are kept cleanly separated.
+- **Fidelity is now visible.** Each break shows how many of the full **32 NFL
+  teams** were captured, lists which are **missing**, and raises a **🔴 alarm**
+  if the same team was sold to two customers in one break (one team = one
+  customer per break).
+- **Multi-card alarm.** Any customer with more than one card across their breaks
+  gets a **⚠️ N cards** badge on the Orders list, so the packer double-checks
+  nothing is missed.
+
 ## [1.5.3] - 2026-06-30
 
 ### Added — Sales Dashboard runs on your Whatnot ledger CSV
