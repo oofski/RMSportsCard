@@ -23,6 +23,7 @@
 const crypto = require('node:crypto')
 const reference = require('../shared/reference.json')
 const { ordersCsv, shippingCsv } = require('./csv.cjs')
+const { parseLedgerRows, analyzeLedger } = require('./ledger.cjs')
 
 const VALID_SHIPMENT_CODES = reference.shipmentStatuses.map((s) => s.code)
 const EXCEPTION_CODES = reference.shipmentStatuses.filter((s) => s.isException).map((s) => s.code)
@@ -711,6 +712,76 @@ class Db {
       provider: s.meta.trackingProvider || 'scrape',
       apiKey: s.meta.trackingApiKey || null,
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Whatnot Ledger CSV (Sales Dashboard) — see server/ledger.cjs
+  // ---------------------------------------------------------------------------
+  // The uploaded ledger lives at s.ledger (or null). We store the PARSED rows
+  // (cheap to re-aggregate) plus the source filename, an upload timestamp, and
+  // the user-tunable settings (breaksPerCase). Aggregation is recomputed on read
+  // so changing breaksPerCase never requires a re-upload.
+
+  /**
+   * Parse + store a freshly uploaded ledger CSV, then return its analysis.
+   * @param {string} csvText  raw CSV text (with header)
+   * @param {string} [filename]
+   * @returns {object} analysis (see getLedgerAnalysis)
+   */
+  importLedger(csvText, filename) {
+    const s = this.store.state
+    const { rows } = parseLedgerRows(csvText)
+    s.ledger = {
+      filename: filename || null,
+      uploadedAt: now(),
+      rows,
+      settings: { breaksPerCase: 9 },
+    }
+    this.store.saveNow()
+    return this.getLedgerAnalysis()
+  }
+
+  /**
+   * Aggregate the stored ledger. If no ledger has been uploaded, returns a
+   * lightweight { hasLedger: false }. An optional breaksPerCase override lets the
+   * UI preview different case sizes without persisting them.
+   * @param {number} [breaksPerCase]
+   * @returns {object}
+   */
+  getLedgerAnalysis(breaksPerCase) {
+    const s = this.store.state
+    if (!s.ledger) return { hasLedger: false }
+    const bpc = breaksPerCase != null ? breaksPerCase : s.ledger.settings.breaksPerCase
+    const analysis = analyzeLedger(s.ledger.rows, { breaksPerCase: bpc })
+    return {
+      hasLedger: true,
+      filename: s.ledger.filename,
+      uploadedAt: s.ledger.uploadedAt,
+      breaksPerCase: analysis.perCase.breaksPerCase,
+      ...analysis,
+    }
+  }
+
+  /**
+   * Persist a new breaksPerCase setting (clamped to >= 1) and return the
+   * re-aggregated analysis.
+   * @param {number} n
+   * @returns {object}
+   */
+  setLedgerBreaksPerCase(n) {
+    const s = this.store.state
+    if (!s.ledger) return { hasLedger: false }
+    const clamped = Math.max(1, Math.floor(Number(n) || 9))
+    s.ledger.settings.breaksPerCase = clamped
+    this.store.saveNow()
+    return this.getLedgerAnalysis()
+  }
+
+  /** Discard the uploaded ledger entirely. */
+  clearLedger() {
+    this.store.state.ledger = null
+    this.store.saveNow()
+    return { hasLedger: false }
   }
 }
 

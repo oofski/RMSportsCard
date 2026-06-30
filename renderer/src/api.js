@@ -84,6 +84,18 @@ export const resetQueue = () => request('/api/orders/reset-queue', { method: 'PO
 export const getWhatnotOrders = () => request('/api/whatnot-orders')
 export const getSales = () => request('/api/sales')
 
+// ---- Whatnot ledger (Sales Dashboard, CSV-driven) -------------------------
+// The Sales Dashboard is now powered by an uploaded Whatnot LEDGER CSV export.
+// uploadLedger posts the raw CSV text (already read on the client) and returns
+// the freshly computed analysis. getLedger fetches the current analysis, with
+// an optional breaksPerCase override to recompute per-case rollups on the fly.
+// setLedgerBreaksPerCase persists the breaks-per-case setting and returns the
+// recomputed analysis. clearLedger drops the stored ledger entirely.
+export const uploadLedger = (filename, csv) => request('/api/ledger', { method: 'POST', body: { filename, csv } })
+export const getLedger = (breaksPerCase) => request(`/api/ledger${breaksPerCase ? `?breaksPerCase=${breaksPerCase}` : ''}`)
+export const setLedgerBreaksPerCase = (breaksPerCase) => request('/api/ledger/settings', { method: 'PATCH', body: { breaksPerCase } })
+export const clearLedger = () => request('/api/ledger', { method: 'DELETE' })
+
 // ---- History (daily snapshots) + CSV export -------------------------------
 export const saveSnapshot = (label) => request('/api/snapshots', { method: 'POST', body: { label } })
 export const listSnapshots = () => request('/api/snapshots')
