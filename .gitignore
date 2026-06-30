@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+
+# Build output
+renderer/dist/
+release/
+dist/
+
+# Runtime data (the JSON datastore lives in the OS userData dir at runtime,
+# but if a dev points RMCARDZ_DATA_DIR at the repo we don't want to commit it)
+data/
+*.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/

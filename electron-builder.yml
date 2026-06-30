@@ -1,0 +1,55 @@
+# electron-builder configuration
+# -----------------------------------------------------------------------------
+# Produces the distributable Windows installer (.exe) and wires up auto-update.
+#
+# Build on a Windows machine or CI runner (or Linux with wine) using:
+#     npm run dist:win            # build installer locally, no publish
+#     npm run dist:win:publish    # build + publish a release for auto-update
+#
+# On this Linux dev box (no wine) the runnable .exe is produced instead with:
+#     npm run pack:win            # @electron/packager -> release/RM Cardz-win32-x64/RM Cardz.exe
+#
+# Auto-update uses electron-updater against GitHub Releases (see `publish`).
+appId: com.rmcardz.breakmanager
+productName: RM Cardz
+copyright: Copyright © 2026 rm_cardz
+
+# Only ship what the runtime needs — the renderer source and tests are excluded.
+files:
+  - electron/**/*
+  - server/**/*
+  - shared/**/*
+  - renderer/dist/**/*
+  - package.json
+  - "!**/*.map"
+
+directories:
+  output: release
+  buildResources: build
+
+win:
+  target:
+    - target: nsis      # Installer .exe with auto-update support
+      arch:
+        - x64
+    - target: portable  # Single-file portable .exe (no install needed)
+      arch:
+        - x64
+  artifactName: "${productName}-Setup-${version}.${ext}"
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: RM Cardz
+
+# Auto-update feed. electron-updater reads this block to know where to look for
+# newer releases. Point `owner`/`repo` at the GitHub repository that hosts the
+# published Releases. Publishing requires GH_TOKEN to be set in the build env.
+publish:
+  provider: github
+  owner: oofski
+  repo: rmsportscard
+  releaseType: release

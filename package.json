@@ -1,0 +1,45 @@
+{
+  "name": "rm-cardz",
+  "productName": "RM Cardz",
+  "version": "1.0.0",
+  "description": "RM Cardz — Break Manager & Shipping Tracker. Desktop app for NFL sports-card break fulfillment: parse Whatnot PDFs, run pick-and-pack checklists, and track USPS shipments.",
+  "author": {
+    "name": "rm_cardz",
+    "email": "sidharthrane2@gmail.com"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env RMCARDZ_DEV=1 electron .",
+    "dev": "concurrently -k -n RENDERER,ELECTRON -c blue,green \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "build:renderer": "vite build",
+    "start": "electron .",
+    "pack:win": "npm run build:renderer && electron-packager . \"RM Cardz\" --platform=win32 --arch=x64 --out=release --overwrite --app-version=1.0.0 --ignore=\"^/(renderer/src|test|release)\" --prune=true",
+    "dist:win": "npm run build:renderer && electron-builder --win --publish never",
+    "dist:win:publish": "npm run build:renderer && electron-builder --win --publish always",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "electron-updater": "^6.8.9",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.1",
+    "pdf-parse": "1.1.1"
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.0.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^42.5.1",
+    "electron-builder": "^26.15.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "vite": "^8.1.0",
+    "vitest": "^4.1.9",
+    "wait-on": "^8.0.1"
+  }
+}
