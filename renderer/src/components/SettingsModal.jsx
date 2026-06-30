@@ -30,6 +30,7 @@ export default function SettingsModal({ onClose, onChanged }) {
   const [trackingProvider, setTrackingProvider] = useState('scrape') // 'scrape' | '17track'
   const [trackingApiKey, setTrackingApiKey] = useState('') // only sent if non-empty
   const [trackingKeySet, setTrackingKeySet] = useState(false) // a key is already stored
+  const [autoMinutes, setAutoMinutes] = useState(30) // background auto-check cadence (0 = off)
 
   // --- Lifecycle / status state -------------------------------------------
   const [loading, setLoading] = useState(true) // initial getSettings in flight
@@ -58,6 +59,7 @@ export default function SettingsModal({ onClose, onChanged }) {
         setHasData(!!s.hasData)
         setTrackingProvider(s.trackingProvider || 'scrape')
         setTrackingKeySet(!!s.trackingKeySet)
+        setAutoMinutes(s.trackingAutoRefreshMinutes != null ? s.trackingAutoRefreshMinutes : 30)
       } catch (err) {
         if (active) setError(err.message || 'Could not load settings.')
       } finally {
@@ -92,6 +94,7 @@ export default function SettingsModal({ onClose, onChanged }) {
         eventName: eventName.trim(),
         breaksPerEvent: Number.isFinite(count) && count > 0 ? count : DEFAULT_BREAKS_PER_EVENT,
         trackingProvider,
+        trackingAutoRefreshMinutes: Number(autoMinutes),
       }
       // Only send the key when the user actually typed one, so leaving the field
       // blank never wipes a previously-saved key.
@@ -210,6 +213,29 @@ export default function SettingsModal({ onClose, onChanged }) {
                 ? 'Free key at features.17track.net → Settings → Security → Access Key (free for 100 numbers/month). Reliable structured status — no scraping.'
                 : 'Reads each package’s status from the USPS website. Free and keyless, but USPS may block automated checks. If a refresh reads 0 statuses, switch to 17TRACK above.'}
             </p>
+
+            {desktop && (
+              <label className="field">
+                <span>Auto-check USPS in the background</span>
+                <select
+                  className="select"
+                  value={autoMinutes}
+                  onChange={(e) => setAutoMinutes(Number(e.target.value))}
+                >
+                  <option value={0}>Off (manual refresh only)</option>
+                  <option value={15}>Every 15 minutes</option>
+                  <option value={30}>Every 30 minutes</option>
+                  <option value={60}>Every hour</option>
+                  <option value={120}>Every 2 hours</option>
+                </select>
+              </label>
+            )}
+            {desktop && (
+              <p className="muted small" style={{ marginTop: -4 }}>
+                When on, the app re-checks USPS on its own and updates the Shipping board live —
+                no need to press refresh. (17TRACK is recommended so background checks aren’t blocked.)
+              </p>
+            )}
 
             {/* ---- Desktop: version + update check ----------------------- */}
             {desktop && (

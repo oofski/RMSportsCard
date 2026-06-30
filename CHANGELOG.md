@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.6] - 2026-06-30
+
+### Fixed / Added — shipping status now updates the board LIVE
+The Shipping tab was only as fresh as your last manual click, and the screen
+never re-read saved statuses, so live tracking "didn't report back." Reworked:
+- **Background auto-check.** The desktop app now re-checks USPS on its own on a
+  schedule you choose (Settings → "Auto-check USPS in the background": Off / 15 /
+  30 / 60 / 120 min, default 30) and updates the board automatically — no button
+  press needed. Background and manual checks are de-duplicated so they never
+  scrape the same packages at once.
+- **The board stays live.** The Shipping list now re-pulls saved statuses every
+  few seconds and refreshes the instant any sync finishes, so a status that
+  changed in the background (or on another screen) shows up here right away.
+- **Freshness is visible.** A "🛰️ Last USPS check: 3m ago" line shows exactly how
+  current the data is and whether background checks are on — no more guessing
+  whether a status is stale.
+- Reminder surfaced in-app: USPS may block the keyless scraper, so for reliable
+  background updates add a free **17TRACK** key (Settings → Status source).
+
 ## [1.5.5] - 2026-06-30
 
 ### Fixed — Break Slip parsing now reads MULTI-PAGE breaking slips (the real bug)

@@ -150,3 +150,9 @@ export function onTrackingProgress(cb) {
   if (window.rmcardz && window.rmcardz.onTrackingProgress) return window.rmcardz.onTrackingProgress(cb)
   return () => {}
 }
+// Fires after any status sync (manual or background auto-refresh) so views can
+// reload the board live. Returns an unsubscribe function; no-op in the browser.
+export function onTrackingSynced(cb) {
+  if (window.rmcardz && window.rmcardz.onTrackingSynced) return window.rmcardz.onTrackingSynced(cb)
+  return () => {}
+}

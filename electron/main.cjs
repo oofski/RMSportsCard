@@ -122,31 +122,93 @@ ipcMain.handle('updates:install', () => quitAndInstall())
 //   - 'scrape' (default): best-effort hidden-window scrape of USPS
 // Writes back changed statuses and returns HONEST stats so the UI can tell
 // "updated" from "couldn't read / blocked" (the old code always said "0 updated").
-ipcMain.handle('tracking:refresh', async () => {
+// Guards against overlapping runs (a manual click landing mid-background-run, or
+// two background ticks stacking). A single in-flight refresh is shared so the UI
+// and the timer never double-scrape the same packages at once.
+let trackingRefreshInFlight = null
+
+/**
+ * Run one USPS status refresh: pick the provider, read statuses, write back any
+ * changes, and broadcast progress + a completion event so every open renderer
+ * reloads live. Returns the same stats shape the IPC handler always returned.
+ * Never throws. `source` is 'manual' | 'auto' (for the completion event only).
+ */
+async function runTrackingRefresh(source = 'manual') {
   if (!backend || !backend.db) return { error: 'Backend not ready', updated: 0, scanned: 0 }
-  const shipments = backend.db.listShipments()
-  const cfg = backend.db.getTrackingConfig() // { provider, apiKey }
-  const onProgress = (p) => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
-  }
+  // Coalesce concurrent callers onto the one in-flight run.
+  if (trackingRefreshInFlight) return trackingRefreshInFlight
 
-  let result
-  try {
-    if (cfg.provider === '17track' && cfg.apiKey) {
-      result = await fetch17TrackStatuses({ shipments, onProgress, apiKey: cfg.apiKey })
-    } else {
-      result = await scrapeTracking({ shipments, onProgress })
+  trackingRefreshInFlight = (async () => {
+    const shipments = backend.db.listShipments()
+    const cfg = backend.db.getTrackingConfig() // { provider, apiKey, autoRefreshMinutes }
+    const onProgress = (p) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
     }
-  } catch (err) {
-    return { error: String(err && err.message ? err.message : err), provider: cfg.provider, updated: 0, scanned: shipments.length }
-  }
 
-  const map = (result && result.map) || {}
-  const stats = (result && result.stats) || { scanned: shipments.length, read: 0, blocked: 0, failed: 0 }
-  const by = cfg.provider === '17track' ? '17track' : 'usps'
-  const upd = backend.db.bulkSetShipmentStatusByTracking(map, { by })
-  return { provider: cfg.provider, updated: upd.updated, ...stats }
-})
+    let result
+    try {
+      if (cfg.provider === '17track' && cfg.apiKey) {
+        result = await fetch17TrackStatuses({ shipments, onProgress, apiKey: cfg.apiKey })
+      } else {
+        result = await scrapeTracking({ shipments, onProgress })
+      }
+    } catch (err) {
+      return { error: String(err && err.message ? err.message : err), provider: cfg.provider, updated: 0, scanned: shipments.length }
+    }
+
+    const map = (result && result.map) || {}
+    const stats = (result && result.stats) || { scanned: shipments.length, read: 0, blocked: 0, failed: 0 }
+    const by = cfg.provider === '17track' ? '17track' : 'usps'
+    const upd = backend.db.bulkSetShipmentStatusByTracking(map, { by })
+    const payload = { provider: cfg.provider, updated: upd.updated, lastTrackingSyncAt: upd.lastTrackingSyncAt, source, ...stats }
+    // Tell every renderer a sync just finished so it can reload the board live
+    // (covers the background run, which no renderer is awaiting).
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-synced', payload)
+    return payload
+  })()
+
+  try {
+    return await trackingRefreshInFlight
+  } finally {
+    trackingRefreshInFlight = null
+  }
+}
+
+ipcMain.handle('tracking:refresh', async () => runTrackingRefresh('manual'))
+
+// -----------------------------------------------------------------------------
+// Background auto-refresh: keep statuses live without manual clicks.
+// -----------------------------------------------------------------------------
+// A single low-frequency heartbeat (every 60s) checks the configured cadence
+// (Settings -> trackingAutoRefreshMinutes; 0 = off) against the last sync time
+// and runs a refresh when due. Reading the config each tick means a settings
+// change takes effect without restarting the timer, and the in-flight guard
+// keeps a background tick from colliding with a manual refresh.
+const AUTO_TRACKING_HEARTBEAT_MS = 60 * 1000
+let autoTrackingTimer = null
+
+function startAutoTracking() {
+  if (autoTrackingTimer) return
+  autoTrackingTimer = setInterval(async () => {
+    try {
+      if (!backend || !backend.db) return
+      if (trackingRefreshInFlight) return // a run is already happening
+      if (!mainWindow || mainWindow.isDestroyed()) return // no UI to update
+      const cfg = backend.db.getTrackingConfig()
+      const minutes = Number(cfg.autoRefreshMinutes)
+      if (!minutes || minutes <= 0) return // auto-refresh disabled
+      const last = cfg.lastTrackingSyncAt ? Date.parse(cfg.lastTrackingSyncAt) : 0
+      const dueAt = last + minutes * 60 * 1000
+      if (Date.now() < dueAt) return // not due yet
+      if (backend.db.listShipments().length === 0) return // nothing to track
+      await runTrackingRefresh('auto')
+    } catch (_) {
+      /* never let the heartbeat throw */
+    }
+  }, AUTO_TRACKING_HEARTBEAT_MS)
+  // Don't let the timer keep the app alive on its own.
+  if (autoTrackingTimer.unref) autoTrackingTimer.unref()
+}
 
 // -----------------------------------------------------------------------------
 // App lifecycle
@@ -162,6 +224,9 @@ app.whenReady().then(async () => {
   const apiBase = backend.url
 
   createWindow(apiBase)
+
+  // Keep USPS statuses live in the background (paced by the Settings cadence).
+  startAutoTracking()
 
   // Auto-update only makes sense for an installed/packaged build.
   if (!isDev && app.isPackaged) {

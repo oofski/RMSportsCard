@@ -47,6 +47,15 @@ contextBridge.exposeInMainWorld('rmcardz', {
     ipcRenderer.on('tracking-progress', listener)
     return () => ipcRenderer.removeListener('tracking-progress', listener)
   },
+  /** Subscribe to "a status sync just finished" — fired after BOTH manual and
+   *  background auto-refreshes so any open view can reload live. Payload carries
+   *  { provider, updated, scanned, read, blocked, failed, source, lastTrackingSyncAt }.
+   *  Returns an unsubscribe function. */
+  onTrackingSynced: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('tracking-synced', listener)
+    return () => ipcRenderer.removeListener('tracking-synced', listener)
+  },
 
   // ---- Auto-update -------------------------------------------------------
   /** Ask the updater to check the release feed now. */

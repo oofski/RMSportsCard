@@ -23,6 +23,25 @@ const FILTER_NOT_UPDATED = 'not_updated'
 // How long the transient confirmation toast stays on screen (ms).
 const TOAST_MS = 2200
 
+// How often the board re-pulls saved statuses from the local backend so changes
+// (a background USPS sync, or an edit on another screen) appear without a manual
+// reload. This polls the LOCAL db only — it does NOT hit USPS.
+const POLL_MS = 12000
+
+// "3m ago" / "just now" — a compact freshness label for the last sync time.
+function timeAgo(iso) {
+  if (!iso) return 'never'
+  const then = Date.parse(iso)
+  if (!Number.isFinite(then)) return 'never'
+  const secs = Math.max(0, Math.round((Date.now() - then) / 1000))
+  if (secs < 45) return 'just now'
+  const mins = Math.round(secs / 60)
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.round(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.round(hrs / 24)}d ago`
+}
+
 export default function ShippingTracker({ currentUser }) {
   // ---- Server-backed state -------------------------------------------------
   const [shipments, setShipments] = useState([])
@@ -31,6 +50,10 @@ export default function ShippingTracker({ currentUser }) {
   const [loadError, setLoadError] = useState('') // fatal load failure banner
   const [actionError, setActionError] = useState('') // recoverable action banner
   const [tracking, setTracking] = useState(null) // { done, total } while auto-scanning USPS
+  const [lastSyncAt, setLastSyncAt] = useState(null) // ISO of the last USPS sync
+  const [autoMinutes, setAutoMinutes] = useState(0) // background cadence (0 = off)
+  // Bumped on each poll purely to re-render so the "x ago" label keeps ticking.
+  const [, setNowTick] = useState(0)
 
   // ---- View state ----------------------------------------------------------
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
@@ -76,6 +99,59 @@ export default function ShippingTracker({ currentUser }) {
       if (toastTimer.current) clearTimeout(toastTimer.current)
     }
   }, [])
+
+  // ---- Live board: poll the local backend + react to sync events ----------
+  // Re-pull saved statuses from the LOCAL backend (no USPS hit). Used by the
+  // poller and the "sync finished" subscription so the board never goes stale.
+  const reloadShipments = useCallback(async () => {
+    try {
+      const fresh = await api.getShipments()
+      setShipments(Array.isArray(fresh) ? fresh : [])
+    } catch (_) {
+      /* keep the current list on a transient read error */
+    }
+  }, [])
+
+  // Mirror "is a USPS scan running" into a ref so the poller can pause without
+  // being torn down/recreated each time `tracking` changes.
+  const trackingRef = useRef(false)
+  useEffect(() => { trackingRef.current = !!tracking }, [tracking])
+
+  // Pull the last-sync time + auto cadence once so the toolbar shows freshness.
+  useEffect(() => {
+    let alive = true
+    api.getSettings().then((s) => {
+      if (!alive || !s) return
+      setLastSyncAt(s.lastTrackingSyncAt || null)
+      setAutoMinutes(Number(s.trackingAutoRefreshMinutes) || 0)
+    }).catch(() => {})
+    return () => { alive = false }
+  }, [])
+
+  // Poll the local board so a background USPS sync (or an edit on another screen)
+  // appears here live. Pauses while a scan is mid-flight (we reload right after).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!trackingRef.current) reloadShipments()
+      setNowTick((t) => t + 1) // re-render so the "x ago" label keeps ticking
+    }, POLL_MS)
+    return () => clearInterval(id)
+  }, [reloadShipments])
+
+  // The instant ANY sync finishes (manual OR background auto-refresh), reload the
+  // board and refresh the freshness stamp — this is what makes auto-tracking
+  // actually report back into the system live.
+  useEffect(() => {
+    const off = api.onTrackingSynced((p) => {
+      reloadShipments()
+      if (p && p.lastTrackingSyncAt) setLastSyncAt(p.lastTrackingSyncAt)
+      if (p && p.source === 'auto') {
+        const read = p.read != null ? p.read : (p.updated || 0)
+        showToast(`Auto-checked USPS · updated ${p.updated || 0} · read ${read}/${p.scanned || 0}`)
+      }
+    })
+    return off
+  }, [reloadShipments, showToast])
 
   // ---- Status summary counts ----------------------------------------------
   // Tally each status code once over the full list (not the filtered view) plus
@@ -209,6 +285,7 @@ export default function ShippingTracker({ currentUser }) {
     setTracking({ done: 0, total: shipments.length })
     try {
       const res = await api.refreshTracking()
+      if (res && res.lastTrackingSyncAt) setLastSyncAt(res.lastTrackingSyncAt)
       if (res && res.error) {
         setActionError(res.error)
       } else if (res) {
@@ -313,6 +390,16 @@ export default function ShippingTracker({ currentUser }) {
             ? 'Auto-update reads each package’s status directly from USPS (no manual entry). You can still set any status by hand below.'
             : 'Auto-update runs in the desktop app. Your browser may also block multiple tabs — allow popups for this app.'}
         </p>
+        {/* Freshness line: when statuses were last pulled from USPS, and whether
+            the background auto-check is on — so "live" is visible, not assumed. */}
+        {api.isDesktop && (
+          <p className="muted small" style={{ margin: 0 }} title={lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'No USPS sync yet'}>
+            🛰️ Last USPS check: <strong>{timeAgo(lastSyncAt)}</strong>
+            {autoMinutes > 0
+              ? ` · auto-checks every ${autoMinutes} min`
+              : ' · auto-check off (turn it on in Settings)'}
+          </p>
+        )}
       </div>
 
       {/* ---- Status summary panel ------------------------------------------ */}

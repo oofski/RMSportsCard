@@ -332,8 +332,12 @@ class Db {
       sh.lastUpdated = now()
       updated += 1
     }
-    if (updated) this.store.saveNow()
-    return { updated, matched: Object.keys(map || {}).length, unchanged, kept }
+    // Record WHEN we last synced from a carrier, regardless of whether anything
+    // changed — so the UI can show a "last checked" freshness time and the
+    // background auto-refresh can pace itself. Persist even on a zero-update sync.
+    this.store.state.meta.lastTrackingSyncAt = now()
+    this.store.saveNow()
+    return { updated, matched: Object.keys(map || {}).length, unchanged, kept, lastTrackingSyncAt: this.store.state.meta.lastTrackingSyncAt }
   }
 
   // ---------------------------------------------------------------------------
@@ -736,10 +740,16 @@ class Db {
       // only whether one is set — but the provider choice is.
       trackingProvider: s.meta.trackingProvider || 'scrape', // 'scrape' | '17track'
       trackingKeySet: !!s.meta.trackingApiKey,
+      // How often the desktop app auto-checks USPS in the background (minutes;
+      // 0 = off). Default 30 so statuses update live without manual clicks.
+      trackingAutoRefreshMinutes:
+        s.meta.trackingAutoRefreshMinutes != null ? s.meta.trackingAutoRefreshMinutes : 30,
+      // When the last automatic/manual carrier sync ran (ISO string or null).
+      lastTrackingSyncAt: s.meta.lastTrackingSyncAt || null,
     }
   }
 
-  updateSettings({ eventName, breaksPerEvent, trackingProvider, trackingApiKey }) {
+  updateSettings({ eventName, breaksPerEvent, trackingProvider, trackingApiKey, trackingAutoRefreshMinutes }) {
     const s = this.store.state
     if (eventName !== undefined) s.meta.event.name = eventName
     if (breaksPerEvent !== undefined) s.meta.breaksPerEvent = Number(breaksPerEvent) || 9
@@ -748,16 +758,26 @@ class Db {
     }
     // Empty string clears the key; undefined leaves it untouched.
     if (trackingApiKey !== undefined) s.meta.trackingApiKey = trackingApiKey ? String(trackingApiKey).trim() : null
+    // Background auto-refresh cadence. Clamp to a small allow-list (0 = off) so a
+    // typo can never set a punishing 10-second USPS hammer that trips Akamai.
+    if (trackingAutoRefreshMinutes !== undefined) {
+      const ALLOWED = [0, 15, 30, 60, 120]
+      const n = Number(trackingAutoRefreshMinutes)
+      s.meta.trackingAutoRefreshMinutes = ALLOWED.includes(n) ? n : 30
+    }
     this.store.saveNow()
     return this.getSettings()
   }
 
-  /** Tracking provider + key for the Electron main process to choose a source. */
+  /** Tracking provider + key + cadence for the Electron main process. */
   getTrackingConfig() {
     const s = this.store.state
     return {
       provider: s.meta.trackingProvider || 'scrape',
       apiKey: s.meta.trackingApiKey || null,
+      autoRefreshMinutes:
+        s.meta.trackingAutoRefreshMinutes != null ? s.meta.trackingAutoRefreshMinutes : 30,
+      lastTrackingSyncAt: s.meta.lastTrackingSyncAt || null,
     }
   }
 
