@@ -6,6 +6,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-30
+
+Reworks fulfillment around the order, adds a planner/checker split, and makes
+USPS delivery status automatic.
+
+### Added — Planner (Order Queue)
+- New order-centric **Planner** view: one card per customer order (package),
+  showing that order's breaks + teams, with a four-step pipeline the planner
+  clicks through — **To Pick → Put Together → Sent → All Good**.
+- **Hold/Pause** an order (e.g. waiting on a break that isn't opened yet); held
+  orders sink to the bottom of the queue with an optional reason.
+- **Move up / down** to manually reorder the queue (within active vs. held).
+- Per-order team checkboxes (shared pick detail with the Checker view) and a
+  live pick-progress bar; filter chips by stage / flagged / held + search.
+
+### Changed — two roles
+- The per-break checklist is now the **Checker** view (check off which cards are
+  present from each break); the new **Planner** view handles per-order assembly.
+  Tabs are now Planner · Checker · Shipping Tracker · Overview.
+- "Sent" and "All Good" in the Planner write the shipment's status, so the
+  Shipping Tracker stays in sync — one source of truth.
+
+### Added — automatic USPS status (no API key)
+- **Auto-update status (USPS)** button in the Shipping Tracker and Planner: the
+  Electron main process loads each tracking page in a hidden Chromium window and
+  reads the live status (Delivered / In Transit / Out for Delivery / Exception /
+  Returned), updating the board automatically (stamped setBy "auto"). No API key
+  or signup; best-effort with manual fallback. (Runs in the desktop app.)
+
+### Fixed
+- electron-builder NSIS and portable targets had the same artifactName and
+  collided; they're now `Setup-*` and `Portable-*`.
+
 ## [1.0.0] - 2026-06-30
 
 First public release: a self-contained Windows desktop app for fulfilling NFL

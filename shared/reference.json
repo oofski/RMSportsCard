@@ -28,6 +28,14 @@
     { "code": "packed",  "label": "Packed" },
     { "code": "shipped", "label": "Shipped" }
   ],
+  "orderStages": [
+    { "code": "to_pick",      "label": "To Pick",      "emoji": "📋", "color": "#9ca3af", "terminal": false },
+    { "code": "put_together", "label": "Put Together", "emoji": "📦", "color": "#38bdf8", "terminal": false },
+    { "code": "sent",         "label": "Sent",         "emoji": "🚚", "color": "#eab308", "terminal": false },
+    { "code": "all_good",     "label": "All Good",      "emoji": "✅", "color": "#22c55e", "terminal": true },
+    { "code": "exception",    "label": "Exception",    "emoji": "🔴", "color": "#ef4444", "terminal": false },
+    { "code": "returned",     "label": "Returned",     "emoji": "↩️", "color": "#a855f7", "terminal": true }
+  ],
   "userRoles": [
     { "code": "admin",  "label": "Admin",  "canManageUsers": true },
     { "code": "picker", "label": "Picker", "canManageUsers": false },

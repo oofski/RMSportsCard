@@ -32,6 +32,18 @@ contextBridge.exposeInMainWorld('rmcardz', {
   /** The installed application version (from package.json). */
   getAppVersion: () => ipcRenderer.invoke('app-version'),
 
+  // ---- Automatic USPS status -------------------------------------------------
+  /** Scrape USPS for every shipment and auto-update statuses. Resolves to
+   *  { updated, matched, scanned }. */
+  refreshTracking: () => ipcRenderer.invoke('tracking:refresh'),
+  /** Subscribe to scrape progress { done, total, trackingNumber, code }.
+   *  Returns an unsubscribe function. */
+  onTrackingProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload)
+    ipcRenderer.on('tracking-progress', listener)
+    return () => ipcRenderer.removeListener('tracking-progress', listener)
+  },
+
   // ---- Auto-update -------------------------------------------------------
   /** Ask the updater to check the release feed now. */
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),

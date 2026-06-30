@@ -158,6 +158,23 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-3); border: 1px solid var(--line); padding: 10px 18px; border-radius: 999px; box-shadow: var(--shadow); z-index: 60; }
 .status-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
 
+/* ---- Planner / order queue --------------------------------------------- */
+.order-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
+.order-card.held { opacity: 0.62; }
+.order-card.flagged { box-shadow: inset 4px 0 0 var(--bad); }
+.stage-steps { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stage-step { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text-dim); cursor: pointer; font-weight: 700; font-size: 13px; }
+.stage-step:hover { filter: brightness(1.18); }
+.stage-step.active { color: #06283a; border-color: transparent; }
+.stage-arrow { color: var(--text-dim); }
+.team-chip { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; margin: 3px; font-size: 13px; user-select: none; }
+.team-chip:hover { filter: brightness(1.15); }
+.team-chip.checked { background: #14532d; border-color: var(--good); color: #bbf7d0; text-decoration: line-through; }
+.break-group { margin: 8px 0; }
+.break-group .bk { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.chip-filter { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text-dim); cursor: pointer; font-weight: 600; font-size: 13px; }
+.chip-filter.active { border-color: var(--accent); color: var(--text); background: var(--bg-3); }
+
 @media (max-width: 720px) {
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
 }

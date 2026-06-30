@@ -73,6 +73,12 @@ export const updateShipment = (id, payload) => request(`/api/shipments/${id}`, {
 export const getBatchUrls = () => request('/api/shipments/batch-urls')
 export const getTrackingNumbers = () => request('/api/shipments/tracking-numbers')
 
+// ---- Orders / Fulfillment Queue (Planner view) ----------------------------
+export const getOrders = () => request('/api/orders')
+export const setOrderStage = (id, stage) => request(`/api/orders/${id}/stage`, { method: 'PATCH', body: { stage } })
+export const setOrderHold = (id, onHold, reason) => request(`/api/orders/${id}/hold`, { method: 'PATCH', body: { onHold, reason } })
+export const moveOrder = (id, direction) => request(`/api/orders/${id}/move`, { method: 'PATCH', body: { direction } })
+
 // ---- Dashboard / settings -------------------------------------------------
 export const getDashboard = () => request('/api/dashboard')
 export const getSettings = () => request('/api/settings')
@@ -92,4 +98,14 @@ export function openExternalBatch(urls) {
 }
 export async function copyToClipboard(text) {
   try { await navigator.clipboard.writeText(text); return true } catch { return false }
+}
+
+// Automatic USPS status refresh (desktop only — needs the Electron browser).
+export function refreshTracking() {
+  if (window.rmcardz && window.rmcardz.refreshTracking) return window.rmcardz.refreshTracking()
+  return Promise.resolve({ error: 'Auto-tracking is only available in the desktop app.', updated: 0, scanned: 0 })
+}
+export function onTrackingProgress(cb) {
+  if (window.rmcardz && window.rmcardz.onTrackingProgress) return window.rmcardz.onTrackingProgress(cb)
+  return () => {}
 }

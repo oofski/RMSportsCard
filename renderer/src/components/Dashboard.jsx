@@ -67,7 +67,7 @@ export default function Dashboard({ onGoTo }) {
       <div>
         <div className="row-between">
           <div className="section-title" style={{ margin: 0 }}>Module A — Break Progress</div>
-          <button className="btn btn-sm" onClick={() => onGoTo('checklist')}>Open Break Checklist →</button>
+          <button className="btn btn-sm" onClick={() => onGoTo('checker')}>Open Checker →</button>
         </div>
         <div className="panel" style={{ marginTop: 10 }}>
           {breaks.length === 0 && <div style={{ padding: 16 }} className="muted">No breaks imported.</div>}
@@ -79,7 +79,7 @@ export default function Dashboard({ onGoTo }) {
                 key={b.id}
                 className="row"
                 style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', cursor: 'pointer', gap: 14 }}
-                onClick={() => onGoTo('checklist')}
+                onClick={() => onGoTo('checker')}
                 title="Open the Break Checklist"
               >
                 <strong style={{ width: 90 }}>Break #{b.breakNumber}</strong>

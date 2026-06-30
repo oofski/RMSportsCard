@@ -7,7 +7,8 @@ import React from 'react'
 
 export default function TopBar({ user, appVersion, tab, onTab, onLogout, onOpenSettings, onOpenUsers, onUploadNew }) {
   const TABS = [
-    { key: 'checklist', label: '📦 Break Checklist' },
+    { key: 'planner', label: '📋 Planner' },
+    { key: 'checker', label: '✅ Checker' },
     { key: 'shipping', label: '🚚 Shipping Tracker' },
     { key: 'overview', label: '📊 Overview' },
   ]

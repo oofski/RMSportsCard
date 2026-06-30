@@ -30,6 +30,7 @@ export default function ShippingTracker({ currentUser }) {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('') // fatal load failure banner
   const [actionError, setActionError] = useState('') // recoverable action banner
+  const [tracking, setTracking] = useState(null) // { done, total } while auto-scanning USPS
 
   // ---- View state ----------------------------------------------------------
   const [statusFilter, setStatusFilter] = useState(FILTER_ALL)
@@ -194,6 +195,31 @@ export default function ShippingTracker({ currentUser }) {
     showToast(ok ? 'Copied tracking number' : 'Copy failed')
   }, [showToast])
 
+  // ---- Auto-update status from USPS (desktop only) ------------------------
+  // The Electron main process scrapes each tracking page in a hidden window and
+  // writes back any changed statuses; we subscribe to its progress and reload.
+  useEffect(() => {
+    const off = api.onTrackingProgress((p) => setTracking({ done: p.done, total: p.total }))
+    return off
+  }, [])
+
+  const refreshUsps = useCallback(async () => {
+    if (!api.isDesktop) { showToast('Auto-tracking is only available in the desktop app'); return }
+    setActionError('')
+    setTracking({ done: 0, total: shipments.length })
+    try {
+      const res = await api.refreshTracking()
+      if (res && res.error) setActionError(res.error)
+      else showToast(`USPS check complete — ${res.updated} updated of ${res.scanned} scanned`)
+      const fresh = await api.getShipments()
+      setShipments(Array.isArray(fresh) ? fresh : [])
+    } catch (err) {
+      setActionError(err.message || 'USPS refresh failed')
+    } finally {
+      setTracking(null)
+    }
+  }, [shipments.length, showToast])
+
   // ---- Toolbar actions -----------------------------------------------------
   // Open every batch's USPS URL at once via the desktop bridge.
   const handleOpenAllBatches = useCallback(() => {
@@ -243,9 +269,21 @@ export default function ShippingTracker({ currentUser }) {
       {/* ---- Toolbar: bulk USPS launch + copy all -------------------------- */}
       <div className="card col" style={{ gap: 10 }}>
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+          {tracking ? (
+            <span className="badge amber">Checking USPS… {tracking.done}/{tracking.total}</span>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={refreshUsps}
+              title="Read live delivery status from USPS and update the board automatically"
+            >
+              🔄 Auto-update status (USPS)
+            </button>
+          )}
           <button
             type="button"
-            className="btn btn-primary"
+            className="btn"
             onClick={handleOpenAllBatches}
             disabled={batchInfo.batches.length === 0}
           >
@@ -256,7 +294,9 @@ export default function ShippingTracker({ currentUser }) {
           </button>
         </div>
         <p className="muted small" style={{ margin: 0 }}>
-          Your browser may block multiple tabs — allow popups for this app.
+          {api.isDesktop
+            ? 'Auto-update reads each package’s status directly from USPS (no manual entry). You can still set any status by hand below.'
+            : 'Auto-update runs in the desktop app. Your browser may also block multiple tabs — allow popups for this app.'}
         </p>
       </div>
 

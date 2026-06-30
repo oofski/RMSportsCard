@@ -18,6 +18,7 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require('electron')
 const path = require('node:path')
 const { startServer } = require('../server/index.cjs')
 const { initAutoUpdate, checkForUpdatesManually, quitAndInstall } = require('./updater.cjs')
+const { refreshTracking } = require('./tracking.cjs')
 
 // True when launched via `npm run dev` (renderer served by Vite on :5173).
 const isDev = process.env.RMCARDZ_DEV === '1'
@@ -99,6 +100,22 @@ ipcMain.handle('app-version', () => app.getVersion())
 // Auto-update controls invoked from the renderer's update banner.
 ipcMain.handle('updates:check', () => checkForUpdatesManually())
 ipcMain.handle('updates:install', () => quitAndInstall())
+
+// Automatic USPS status refresh: scrape every shipment's tracking page in a
+// hidden window and write back any changed statuses (setBy='auto'). Progress is
+// streamed to the renderer so it can show a "12 / 112" indicator.
+ipcMain.handle('tracking:refresh', async () => {
+  if (!backend || !backend.db) return { error: 'Backend not ready', updated: 0, scanned: 0 }
+  const shipments = backend.db.listShipments()
+  const map = await refreshTracking({
+    shipments,
+    onProgress: (p) => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('tracking-progress', p)
+    },
+  })
+  const result = backend.db.bulkSetShipmentStatusByTracking(map, { by: 'auto' })
+  return { ...result, scanned: shipments.length }
+})
 
 // -----------------------------------------------------------------------------
 // App lifecycle

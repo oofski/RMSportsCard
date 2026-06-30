@@ -259,6 +259,176 @@ class Db {
     return this.store.state.shipments.map((s) => s.trackingNumber).filter(Boolean)
   }
 
+  /**
+   * Auto-tracking: bulk-update statuses by tracking number (called by the
+   * Electron main process after scraping the USPS pages). Only writes when the
+   * code actually changed, and stamps setBy='auto' so it's distinguishable from
+   * a manual edit. Manual edits are never silently lost on a no-change scan.
+   * @param {Record<string,string>} map trackingNumber -> status code
+   */
+  bulkSetShipmentStatusByTracking(map, { by = 'auto' } = {}) {
+    const s = this.store.state
+    let updated = 0
+    const unchanged = []
+    for (const sh of s.shipments) {
+      const code = map && map[sh.trackingNumber]
+      if (!code) continue
+      if (!VALID_SHIPMENT_CODES.includes(code)) continue
+      if ((sh.manualStatus && sh.manualStatus.code) === code) { unchanged.push(sh.trackingNumber); continue }
+      sh.manualStatus = { code, setAt: now(), setBy: by }
+      sh.lastUpdated = now()
+      updated += 1
+    }
+    if (updated) this.store.saveNow()
+    return { updated, matched: Object.keys(map || {}).length, unchanged: unchanged.length }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Orders / Fulfillment Queue (Planner view)
+  // -----------------------------------------------------------------------------
+  // One row per customer PACKAGE (= shipment), which is the unit that actually
+  // ships under a single tracking number. Each row carries that customer's
+  // breaks + teams (the pick detail), a pick progress count, and a single
+  // "fulfillment stage" that unifies pick/pack with shipping so Sent/All Good
+  // ARE the shipment's manualStatus (one source of truth with Module B).
+  //
+  // Stage derivation (manualStatus is authoritative for shipping states):
+  //   returned/exception            -> that stage
+  //   delivered                     -> all_good
+  //   in_transit/out_for_delivery   -> sent
+  //   not_shipped + packedAt set    -> put_together
+  //   not_shipped + not packed      -> to_pick
+  // ---------------------------------------------------------------------------
+  _deriveStage(sh) {
+    const code = (sh.manualStatus && sh.manualStatus.code) || 'not_shipped'
+    if (code === 'returned') return 'returned'
+    if (code === 'exception') return 'exception'
+    if (code === 'delivered') return 'all_good'
+    if (code === 'in_transit' || code === 'out_for_delivery') return 'sent'
+    return sh.packedAt ? 'put_together' : 'to_pick'
+  }
+
+  /** Ensure every shipment has a stable integer queue position for manual ordering. */
+  _ensureQueueOrder() {
+    const s = this.store.state
+    let max = 0
+    s.shipments.forEach((sh) => { if (typeof sh.queueOrder === 'number') max = Math.max(max, sh.queueOrder) })
+    s.shipments.forEach((sh) => { if (typeof sh.queueOrder !== 'number') sh.queueOrder = ++max })
+  }
+
+  _orderRow(sh) {
+    const s = this.store.state
+    const customer = s.customers.find((c) => c.id === sh.customerId)
+    const slots = s.teamSlots.filter((t) => t.customerId === sh.customerId)
+    const byBreak = new Map()
+    slots.forEach((t) => {
+      if (!byBreak.has(t.breakNumber)) byBreak.set(t.breakNumber, [])
+      byBreak.get(t.breakNumber).push({ slotId: t.id, teamName: t.teamName, checkedOff: !!t.checkedOff, orderId: t.orderId })
+    })
+    const breaks = [...byBreak.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([breakNumber, teams]) => ({ breakNumber, teams: teams.sort((x, y) => x.teamName.localeCompare(y.teamName)) }))
+    const checked = slots.filter((t) => t.checkedOff).length
+    return {
+      id: sh.id,
+      customerId: sh.customerId,
+      customer: customer
+        ? { handle: customer.whatnotHandle, realName: customer.realName, address: customer.address, isNew: !!customer.isNew }
+        : { handle: sh.customerId, realName: sh.customerId, address: '', isNew: false },
+      trackingNumber: sh.trackingNumber,
+      serviceType: sh.serviceType,
+      uspsUrl: sh.uspsUrl,
+      notes: sh.notes || null,
+      manualStatus: sh.manualStatus || { code: 'not_shipped', setAt: null, setBy: null },
+      stage: this._deriveStage(sh),
+      onHold: !!sh.onHold,
+      heldReason: sh.heldReason || null,
+      queueOrder: sh.queueOrder,
+      packedAt: sh.packedAt || null,
+      packedBy: sh.packedBy || null,
+      breaks,
+      breakCount: breaks.length,
+      pick: { checked, total: slots.length },
+    }
+  }
+
+  listOrders() {
+    this._ensureQueueOrder()
+    const rows = this.store.state.shipments.map((sh) => this._orderRow(sh))
+    // Held orders sink to the bottom; otherwise honor the manual queue order.
+    return rows.sort((a, b) => {
+      if (a.onHold !== b.onHold) return a.onHold ? 1 : -1
+      return a.queueOrder - b.queueOrder
+    })
+  }
+
+  /** Advance/revert an order through the fulfillment pipeline. */
+  setOrderStage(shipmentId, stage, user) {
+    const sh = this.store.state.shipments.find((x) => x.id === shipmentId)
+    if (!sh) return null
+    const ts = now()
+    const by = (user && user.username) || null
+    switch (stage) {
+      case 'to_pick':
+        sh.packedAt = null; sh.packedBy = null
+        sh.manualStatus = { code: 'not_shipped', setAt: ts, setBy: by }
+        break
+      case 'put_together':
+        sh.packedAt = ts; sh.packedBy = by
+        sh.manualStatus = { code: 'not_shipped', setAt: ts, setBy: by }
+        break
+      case 'sent':
+        sh.packedAt = sh.packedAt || ts
+        sh.manualStatus = { code: 'in_transit', setAt: ts, setBy: by } // shipping source of truth
+        break
+      case 'all_good':
+        sh.packedAt = sh.packedAt || ts
+        sh.manualStatus = { code: 'delivered', setAt: ts, setBy: by }
+        break
+      default:
+        throw Object.assign(new Error(`Invalid stage: ${stage}`), { status: 400 })
+    }
+    sh.lastUpdated = ts
+    this.store.saveNow()
+    return this._orderRow(sh)
+  }
+
+  /** Pause/resume an order (e.g. waiting on a break that isn't opened yet). */
+  setOrderHold(shipmentId, onHold, reason, user) {
+    const sh = this.store.state.shipments.find((x) => x.id === shipmentId)
+    if (!sh) return null
+    sh.onHold = !!onHold
+    sh.heldReason = onHold ? (reason || null) : null
+    sh.lastUpdated = now()
+    this.store.saveNow()
+    return this._orderRow(sh)
+  }
+
+  /**
+   * Move an order up/down in the queue AS DISPLAYED. We sort the same way
+   * listOrders does (held rows last, then queueOrder) and swap queue positions
+   * with the nearest neighbor that shares the same hold state — so moving never
+   * tangles active orders with paused ones.
+   */
+  moveOrder(shipmentId, direction) {
+    this._ensureQueueOrder()
+    const sorted = [...this.store.state.shipments].sort((a, b) =>
+      (!!a.onHold !== !!b.onHold ? (a.onHold ? 1 : -1) : a.queueOrder - b.queueOrder))
+    const idx = sorted.findIndex((x) => x.id === shipmentId)
+    if (idx < 0) return null
+    const target = sorted[idx]
+    const step = direction === 'up' ? -1 : 1
+    let j = idx + step
+    // Skip over neighbors in the other hold group.
+    while (j >= 0 && j < sorted.length && (!!sorted[j].onHold !== !!target.onHold)) j += step
+    if (j >= 0 && j < sorted.length) {
+      const neighbor = sorted[j]
+      const tmp = target.queueOrder; target.queueOrder = neighbor.queueOrder; neighbor.queueOrder = tmp
+      this.store.saveNow()
+    }
+    return this._orderRow(target)
+  }
+
   // ---------------------------------------------------------------------------
   // Dashboard (spec §8 / §12)
   // ---------------------------------------------------------------------------
