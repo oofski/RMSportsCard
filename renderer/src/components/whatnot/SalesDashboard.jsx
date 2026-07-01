@@ -197,6 +197,9 @@ export default function SalesDashboard({ currentUser }) {
     perCase = {},
     unattributed = {},
     warnings = [],
+    revenueByProduct = [],
+    saleTypeMix = [],
+    costs = {},
   } = data
 
   const {
@@ -242,6 +245,11 @@ export default function SalesDashboard({ currentUser }) {
     })
   }
 
+  // Bar scaling for the product + sale-type sections, and a per-day average.
+  const maxProductRev = revenueByProduct.reduce((m, p) => Math.max(m, Number(p.revenue) || 0), 0)
+  const maxTypeRev = saleTypeMix.reduce((m, t) => Math.max(m, Number(t.revenue) || 0), 0)
+  const avgPerDay = dateRange.days ? netRevenue / dateRange.days : 0
+
   return (
     <div className="col" style={{ gap: 18 }}>
       {/* Hidden input drives the "Replace CSV" button on this screen too. */}
@@ -271,7 +279,7 @@ export default function SalesDashboard({ currentUser }) {
         <div className="banner error" style={{ borderRadius: 8 }}>{error}</div>
       )}
 
-      {/* ---- Headline stats ------------------------------------------------- */}
+      {/* ---- 1. Headline KPIs ---------------------------------------------- */}
       <div className="stat-grid">
         <div className="stat">
           <div className="label">Net Revenue</div>
@@ -290,15 +298,57 @@ export default function SalesDashboard({ currentUser }) {
           <div className="label">Sales</div>
           <div className="value">{count(earningCount)}</div>
         </div>
+        <div className="stat">
+          <div className="label">Avg / Day</div>
+          <div className="value">{money(avgPerDay)}</div>
+        </div>
       </div>
 
-      {/* ---- Excluded-from-revenue summary line ----------------------------- */}
-      <div className="muted small">
-        Excluded from revenue: Adjustments {money(adjustments)} · Tips {money(tips)} ·
-        Payouts ignored ({count(payoutsIgnoredCount)})
+      {/* ---- 2. Revenue by Product (the hero view) ------------------------- */}
+      <div>
+        <div className="section-title" style={{ margin: 0 }}>Revenue by Product</div>
+        <div className="panel" style={{ marginTop: 10 }}>
+          {revenueByProduct.length === 0 && (
+            <div style={{ padding: 16 }} className="muted">No product revenue recorded.</div>
+          )}
+          {revenueByProduct.map((p) => {
+            const pct = maxProductRev > 0 ? Math.max(0, ((Number(p.revenue) || 0) / maxProductRev) * 100) : 0
+            return (
+              <div key={p.productLabel} className="row" style={{ padding: '10px 14px', gap: 14, borderBottom: '1px solid var(--line)' }}>
+                <span className="nowrap" style={{ width: 150, overflow: 'hidden', textOverflow: 'ellipsis' }} title={p.product || p.productLabel}>{p.productLabel}</span>
+                <div className="bar" style={{ flex: 1 }}><span style={{ width: pct + '%' }} /></div>
+                <span className="mono nowrap" style={{ width: 100, textAlign: 'right' }}>{money(p.revenue)}</span>
+                <span className="muted small nowrap" style={{ width: 46, textAlign: 'right' }}>{count(p.pctOfGross)}%</span>
+                <span className="muted small nowrap" style={{ width: 52, textAlign: 'right' }}>({count(p.count)})</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
 
-      {/* ---- Revenue by day ------------------------------------------------- */}
+      {/* ---- 3. Sale-type mix (reframes the old "unattributed") ------------ */}
+      <div>
+        <div className="section-title" style={{ margin: 0 }}>Sale-type Mix</div>
+        <div className="panel" style={{ marginTop: 10 }}>
+          {saleTypeMix.length === 0 && (
+            <div style={{ padding: 16 }} className="muted">No sales recorded.</div>
+          )}
+          {saleTypeMix.map((t) => {
+            const pct = maxTypeRev > 0 ? Math.max(0, ((Number(t.revenue) || 0) / maxTypeRev) * 100) : 0
+            return (
+              <div key={t.type} className="row" style={{ padding: '10px 14px', gap: 14, borderBottom: '1px solid var(--line)' }}>
+                <span className="nowrap" style={{ width: 150 }}>{t.label}</span>
+                <div className="bar" style={{ flex: 1 }}><span style={{ width: pct + '%' }} /></div>
+                <span className="mono nowrap" style={{ width: 100, textAlign: 'right' }}>{money(t.revenue)}</span>
+                <span className="muted small nowrap" style={{ width: 46, textAlign: 'right' }}>{count(t.pctOfGross)}%</span>
+                <span className="muted small nowrap" style={{ width: 52, textAlign: 'right' }}>({count(t.count)})</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ---- 4. Revenue by day (drill down by product) --------------------- */}
       <div>
         <div className="section-title" style={{ margin: 0 }}>Revenue by Day</div>
         <div className="panel" style={{ marginTop: 10 }}>
@@ -311,10 +361,10 @@ export default function SalesDashboard({ currentUser }) {
             // at 0% (no NaN / divide-by-zero). Clamp to >=0 so a negative-net day
             // (giveaways exceed gross) never yields an invalid negative width.
             const pct = maxNet > 0 ? Math.max(0, (net / maxNet) * 100) : 0
-            // Drill-down rows for this day (guard for older payloads with no
-            // breakdown). These sum to that day's GROSS break earnings, not net.
-            const breakdown = d.breakdown || []
-            const hasBreakdown = breakdown.length > 0
+            // Day drill-down: that day's revenue grouped by PRODUCT (sums to the
+            // day's gross). Falls back gracefully on older payloads.
+            const products = d.products || []
+            const hasDetail = products.length > 0
             const isOpen = expandedDays.has(d.day)
             return (
               <div key={d.day} style={{ borderBottom: '1px solid var(--line)' }}>
@@ -323,13 +373,13 @@ export default function SalesDashboard({ currentUser }) {
                   style={{
                     padding: '10px 14px',
                     gap: 14,
-                    cursor: hasBreakdown ? 'pointer' : 'default',
+                    cursor: hasDetail ? 'pointer' : 'default',
                   }}
-                  onClick={hasBreakdown ? () => toggleDay(d.day) : undefined}
-                  role={hasBreakdown ? 'button' : undefined}
-                  aria-expanded={hasBreakdown ? isOpen : undefined}
+                  onClick={hasDetail ? () => toggleDay(d.day) : undefined}
+                  role={hasDetail ? 'button' : undefined}
+                  aria-expanded={hasDetail ? isOpen : undefined}
                 >
-                  <span className="mono small nowrap" style={{ width: 14, opacity: hasBreakdown ? 1 : 0 }}>
+                  <span className="mono small nowrap" style={{ width: 14, opacity: hasDetail ? 1 : 0 }}>
                     {isOpen ? '▾' : '▸'}
                   </span>
                   <span className="mono small nowrap" style={{ width: 96 }}>{d.day}</span>
@@ -341,17 +391,17 @@ export default function SalesDashboard({ currentUser }) {
                     ({count(d.count)})
                   </span>
                 </div>
-                {isOpen && hasBreakdown && (
+                {isOpen && hasDetail && (
                   <div style={{ padding: '4px 14px 12px 42px' }}>
-                    <div className="muted small" style={{ marginBottom: 4 }}>Breaks (gross)</div>
-                    {breakdown.map((entry, i) => (
+                    <div className="muted small" style={{ marginBottom: 4 }}>By product (gross)</div>
+                    {products.map((entry, i) => (
                       <div
-                        key={`${entry.product || ''}-${entry.breakNumber ?? i}`}
+                        key={`${entry.productLabel || ''}-${i}`}
                         className="row"
                         style={{ gap: 12, padding: '3px 0' }}
                       >
                         <span className="small nowrap" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {entry.label || `Break ${entry.breakNumber ?? '—'}`}
+                          {entry.productLabel}
                         </span>
                         <span className="mono small nowrap" style={{ width: 100, textAlign: 'right' }}>
                           {money(entry.revenue)}
@@ -369,13 +419,42 @@ export default function SalesDashboard({ currentUser }) {
         </div>
       </div>
 
-      {/* ---- Per break / per case ------------------------------------------- */}
+      {/* ---- 5. Costs & extras --------------------------------------------- */}
       <div>
-        <div className="section-title" style={{ margin: 0 }}>Per Break / Per Case</div>
-        <div className="panel" style={{ marginTop: 10, padding: 16 }}>
-          {/* Live control: change breaks-per-case to recompute the case rollups.
-              The input is uncontrolled-ish — it seeds from breaksPerCase and we
-              commit on Enter or blur so we don't fire a request on every keypress. */}
+        <div className="section-title" style={{ margin: 0 }}>Costs &amp; Extras</div>
+        <div className="panel" style={{ padding: 16, marginTop: 10 }}>
+          <div className="stat-grid">
+            <div className="stat">
+              <div className="label">Given Away</div>
+              <div className="value" style={{ color: 'var(--bad)' }}>{money(costs.giveaways)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Shipping Subsidies</div>
+              <div className="value" style={{ color: 'var(--good)' }}>{money(costs.shippingSubsidies)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Platform Fees</div>
+              <div className="value" style={{ color: 'var(--bad)' }}>{money(costs.platformFees)}</div>
+            </div>
+            <div className="stat">
+              <div className="label">Tips</div>
+              <div className="value">{money(costs.tips)}</div>
+            </div>
+          </div>
+          <div className="muted small" style={{ marginTop: 10 }}>
+            Net adjustments {money(costs.adjustmentsNet)} · Payouts ignored ({count(payoutsIgnoredCount)}).
+            Giveaways, adjustments &amp; tips are tracked here but excluded from Net Revenue.
+          </div>
+        </div>
+      </div>
+
+      {/* ---- 6. Team-break detail (secondary, collapsible) ----------------- */}
+      <details className="panel" style={{ display: 'block', padding: 0 }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 700, padding: '12px 14px' }}>
+          Team-break detail · per-case ({count(perBreak.length)} break{perBreak.length === 1 ? '' : 's'})
+        </summary>
+        <div style={{ padding: '0 14px 14px' }}>
+          {/* Live control: change breaks-per-case to recompute the case rollups. */}
           <BreaksPerCaseControl
             value={breaksPerCase}
             busy={busy}
@@ -393,15 +472,13 @@ export default function SalesDashboard({ currentUser }) {
               }
             }}
           />
-
-          {/* Per-case headline numbers. */}
           <div className="stat-grid" style={{ marginTop: 14 }}>
             <div className="stat">
-              <div className="label">Total Breaks</div>
+              <div className="label">Team breaks</div>
               <div className="value">{count(totalBreaks)}</div>
             </div>
             <div className="stat">
-              <div className="label">Total Cases</div>
+              <div className="label">Cases (÷{count(breaksPerCase)})</div>
               <div className="value">{count(totalCases)}</div>
             </div>
             <div className="stat">
@@ -413,60 +490,21 @@ export default function SalesDashboard({ currentUser }) {
               <div className="value">{money(avgRevenuePerCase)}</div>
             </div>
           </div>
-
-          {/* Per-product breakdown table. */}
           <table className="grid" style={{ marginTop: 14 }}>
             <thead>
               <tr>
-                <th>Product</th>
-                <th style={{ textAlign: 'right' }}>Breaks</th>
-                <th style={{ textAlign: 'right' }}>Cases</th>
-                <th style={{ textAlign: 'right' }}>Revenue</th>
-              </tr>
-            </thead>
-            <tbody>
-              {byProduct.length === 0 && (
-                <tr><td colSpan={4} className="muted">No per-product breaks recorded.</td></tr>
-              )}
-              {byProduct.map((p, i) => (
-                <tr key={p.product || i}>
-                  <td>{p.product || '—'}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{count(p.breaks)}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{count(p.cases)}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>{money(p.revenue)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ---- Top breaks ----------------------------------------------------- */}
-      <div>
-        <div className="section-title" style={{ margin: 0 }}>Top Breaks</div>
-        <div className="panel" style={{ marginTop: 10 }}>
-          <table className="grid">
-            <thead>
-              <tr>
-                <th>Product</th>
-                <th style={{ textAlign: 'right' }}>Break #</th>
+                <th>Break</th>
                 <th style={{ textAlign: 'right' }}>Revenue</th>
                 <th style={{ textAlign: 'right' }}>Sales</th>
               </tr>
             </thead>
             <tbody>
               {topBreaks.length === 0 && (
-                <tr><td colSpan={4} className="muted">No breaks recorded.</td></tr>
+                <tr><td colSpan={3} className="muted">No team breaks recorded.</td></tr>
               )}
               {topBreaks.map((b, i) => (
-                // Compose a stable key from day + product + break # (fall back to index).
                 <tr key={`${b.day || ''}-${b.product || ''}-${b.breakNumber ?? i}`}>
-                  {/* Prefer the enriched 'Break N · Product · Date' label; fall
-                      back to the raw product string on older/empty payloads. */}
                   <td>{b.label || b.product || '—'}</td>
-                  <td className="mono" style={{ textAlign: 'right' }}>
-                    {b.breakNumber != null ? `#${b.breakNumber}` : '—'}
-                  </td>
                   <td className="mono" style={{ textAlign: 'right' }}>{money(b.revenue)}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{count(b.count)}</td>
                 </tr>
@@ -474,23 +512,12 @@ export default function SalesDashboard({ currentUser }) {
             </tbody>
           </table>
           {moreBreaks > 0 && (
-            <div className="muted small" style={{ padding: '10px 14px' }}>
+            <div className="muted small" style={{ paddingTop: 10 }}>
               + {count(moreBreaks)} more break{moreBreaks === 1 ? '' : 's'} not shown.
             </div>
           )}
         </div>
-      </div>
-
-      {/* ---- Unattributed --------------------------------------------------- */}
-      <div>
-        <div className="section-title" style={{ margin: 0 }}>Unattributed</div>
-        <div className="panel" style={{ marginTop: 10, padding: 16 }}>
-          <div className="muted small">
-            {count(unattributed.count)} sale{Number(unattributed.count) === 1 ? '' : 's'} with no
-            break # (sealed boxes / non-break listings): {money(unattributed.revenue)}
-          </div>
-        </div>
-      </div>
+      </details>
 
       {/* ---- Warnings (collapsible) ----------------------------------------- */}
       {warnings.length > 0 && (

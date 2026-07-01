@@ -372,3 +372,78 @@ describe('perDay breakdown drill-down', () => {
     expect(jun28.breakdown.every((e) => e.revenue >= 0)).toBe(true)
   })
 })
+
+// =============================================================================
+// SALES DASHBOARD REDESIGN — revenue by product, sale-type mix, costs, per-day
+// products. Fully SYNTHETIC. Confirms every new cut reconciles to gross and the
+// money totals are unchanged.
+// =============================================================================
+const REDESIGN_HEADER = '"Created Date","Amount","Listing ID","Order ID","Message","Status","Transaction Type","Completed Date"'
+const REDESIGN_ROWS = [
+  // team_break — Topps Chrome, Break #1 (Jun 20)
+  '"Jun 20, 2026, 1:00:00 PM","$50.00","1","1","Earnings for selling a 1x Topps Chrome Break #1 - Bears","completed","SALES","Jun 20, 2026, 1:00:01 PM"',
+  // hobby_box — Panini Signature (Jun 20)
+  '"Jun 20, 2026, 2:00:00 PM","$200.00","2","2","Earnings for selling a 1x 2025-26 Panini Signature Series Basketball Hobby Box","completed","SALES","Jun 20, 2026, 2:00:01 PM"',
+  // case — Cosmic Football HALF CASE (CASE beats RANDOM) (Jun 20)
+  '"Jun 20, 2026, 3:00:00 PM","$80.00","3","3","Earnings for selling a 1x 2025 Cosmic Football HALF CASE RANDOM TEAMS","completed","SALES","Jun 20, 2026, 3:00:01 PM"',
+  // team_break — Topps Chrome, Break #2 (Jun 21)
+  '"Jun 21, 2026, 1:00:00 PM","$30.00","4","4","Earnings for selling a 1x Topps Chrome Break #2 - Lions","completed","SALES","Jun 21, 2026, 1:00:01 PM"',
+  // random_break — Mega Break, RANDOM TEAMS, no #N (Jun 21)
+  '"Jun 21, 2026, 2:00:00 PM","$40.00","5","5","Earnings for selling a 1x Mega Break Football RANDOM TEAMS","completed","SALES","Jun 21, 2026, 2:00:01 PM"',
+  // costs: shipping subsidy (+), platform fee (-), tip, giveaway
+  '"Jun 20, 2026, 4:00:00 PM","$5.00","6","6","Shipping Subsidy","completed","ADJUSTMENT","Jun 20, 2026, 4:00:01 PM"',
+  '"Jun 20, 2026, 5:00:00 PM","-$8.00","7","7","Whatnot platform charge for shipping adj","completed","ADJUSTMENT","Jun 20, 2026, 5:00:01 PM"',
+  '"Jun 20, 2026, 6:00:00 PM","$10.00","","","Tip from buyer","completed","TIP","Jun 20, 2026, 6:00:01 PM"',
+  '"Jun 20, 2026, 7:00:00 PM","-$3.00","8","8","Charged deduction of $3.00 for giveaway order 99","completed","SALES","Jun 20, 2026, 7:00:01 PM"',
+]
+const REDESIGN_CSV = '﻿' + [REDESIGN_HEADER, ...REDESIGN_ROWS].join('\n') + '\n'
+
+describe('Sales Dashboard redesign analytics', () => {
+  const { rows } = parseLedgerRows(REDESIGN_CSV)
+  const a = analyzeLedger(rows, { breaksPerCase: 9 })
+  const sum = (arr) => Math.round(arr.reduce((s, x) => s + x.revenue, 0) * 100) / 100
+
+  it('keeps money totals unchanged (gross 400, giveaway -3, net 397)', () => {
+    expect(a.totals.grossEarnings).toBe(400)
+    expect(a.totals.giveawayLost).toBe(-3)
+    expect(a.totals.netRevenue).toBe(397)
+  })
+
+  it('revenueByProduct sums to gross, sorted desc, with clean family labels + pct', () => {
+    expect(sum(a.revenueByProduct)).toBe(400)
+    const revs = a.revenueByProduct.map((p) => p.revenue)
+    expect(revs).toEqual([...revs].sort((x, y) => y - x))
+    const panini = a.revenueByProduct.find((p) => p.productLabel === 'Panini Signature')
+    expect(panini).toMatchObject({ revenue: 200, count: 1, pctOfGross: 50 })
+    // "2025 Cosmic Football HALF CASE ..." must read as "Cosmic Football", not "2025" or "Cosmic".
+    expect(a.revenueByProduct.some((p) => p.productLabel === 'Cosmic Football')).toBe(true)
+    expect(a.revenueByProduct.some((p) => p.productLabel === 'Topps Chrome')).toBe(true)
+  })
+
+  it('saleTypeMix classifies team_break/case/hobby_box/random_break and sums to gross', () => {
+    expect(sum(a.saleTypeMix)).toBe(400)
+    const by = Object.fromEntries(a.saleTypeMix.map((t) => [t.type, t.revenue]))
+    expect(by.team_break).toBe(80) // 50 + 30
+    expect(by.hobby_box).toBe(200)
+    expect(by.case).toBe(80) // HALF CASE wins over RANDOM
+    expect(by.random_break).toBe(40)
+    expect(by.single).toBeUndefined()
+  })
+
+  it('costs breaks out giveaways / shipping subsidies / platform fees / tips', () => {
+    expect(a.costs.giveaways).toBe(-3)
+    expect(a.costs.shippingSubsidies).toBe(5)
+    expect(a.costs.platformFees).toBe(-8)
+    expect(a.costs.tips).toBe(10)
+    expect(a.costs.adjustmentsNet).toBe(-3) // 5 - 8
+  })
+
+  it('perDay.products reconciles to each day gross', () => {
+    for (const d of a.perDay) {
+      expect(sum(d.products)).toBe(d.gross)
+    }
+    const jun20 = a.perDay.find((d) => d.day === '2026-06-20')
+    expect(jun20.gross).toBe(330) // 50 + 200 + 80
+    expect(jun20.products.find((p) => p.productLabel === 'Panini Signature').revenue).toBe(200)
+  })
+})

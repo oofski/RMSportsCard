@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.9] - 2026-07-01
+
+### Changed — Sales Dashboard redesigned around what the ledger actually is
+A data analysis of a real ledger showed the dashboard was framing everything as
+"per break / per case", so a THIRD of revenue (cases, boxes, random breaks) fell
+into a scary "Unattributed" bucket and the most useful cut — which product makes
+the money — wasn't shown at all. Rebuilt the dashboard to match the real business:
+- **Revenue by Product** is now the hero view — e.g. Cosmic Chrome ~65% of gross,
+  with a clean short product name, share %, sale count and average. (A new
+  product-family labeler fixes messy names like "2025" → "Panini Signature".)
+- **Sale-type mix** replaces "Unattributed": **Team breaks / Cases / Hobby boxes /
+  Random-team breaks**, each with revenue and % — real categories, not an error.
+- **Costs & Extras** summarizes the leakage in one place: giveaways, shipping
+  subsidies (money in), platform fees (money out), and tips.
+- **Revenue by Day** drill-down now breaks the day down **by product** and
+  reconciles exactly to the day's gross.
+- The old per-break table + per-case control are kept but demoted to a
+  **collapsible "Team-break detail"** section, so the headline stays clean.
+- Net/gross/giveaway totals, the date range, and per-case math are unchanged
+  (verified against the real ledger: net $117,276.39 / gross $117,979.41).
+
 ## [1.5.8] - 2026-07-01
 
 ### Added / Changed — RM SPORTSCARDS rebrand + Sales Dashboard depth + admin recovery

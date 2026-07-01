@@ -180,6 +180,50 @@ function formatDayLabel(dayKey) {
   return `${mon} ${Number(m[3])}`
 }
 
+// Classify an EARNING row into a sale TYPE. A third of real revenue has no
+// "Break #N" — but that is not junk, it is a different kind of sale (a whole
+// case, a hobby box, a random-team break). Surfacing the mix beats dumping it
+// all into a scary "unattributed" bucket. Precedence: a real break number wins;
+// otherwise a "case" beats "random team" (a "half case random teams" is a case).
+function classifySaleType(row) {
+  if (row && row.breakNumber != null) return 'team_break'
+  const s = `${(row && row.product) || ''} ${(row && row.message) || ''}`.toUpperCase()
+  if (/\b(FULL|HALF)\s*CASE\b|\bCASE\b/.test(s)) return 'case'
+  if (/RANDOM\s*TEAM/.test(s)) return 'random_break'
+  if (/HOBBY\s*BOX|\bBOX\b/.test(s)) return 'hobby_box'
+  return 'single'
+}
+
+const SALE_TYPE_LABELS = {
+  team_break: 'Team breaks',
+  case: 'Cases / half-cases',
+  random_break: 'Random-team breaks',
+  hobby_box: 'Hobby boxes',
+  single: 'Other singles',
+}
+
+// A CLEAN product-family label for the "Revenue by product" view. simplifyProduct
+// (used for per-break labels) is too aggressive here — it collapses "Cosmic
+// Football" to "Cosmic" and leaves bare years like "2025" for products that start
+// with one. This keeps the first TWO significant words after dropping a leading
+// quantity ("1x") and year ("2025" / "2025-26" / "2025/26") and filler words, so
+// families read as "Cosmic Chrome", "Cosmic Football", "Panini Signature", etc.
+const PRODUCT_FILLER = new Set(['NEW', 'RELEASE', 'RELASE', 'THE', 'A', 'AND', 'OF', 'FOR', 'WITH', 'ON', 'SCREEN', 'NO', 'TO', 'IN'])
+function productFamily(product) {
+  let s = String(product == null ? '' : product).toUpperCase()
+  s = s.replace(/^\s*\d+\s*X\s+/, '')                 // leading "1x" / "2 x"
+  s = s.replace(/^\s*\d{4}(?:[\/-]\d{2,4})?\s+/, '')  // leading "2025" / "2025-26" / "2025/26"
+  s = s.replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  const keep = []
+  for (const w of s.split(' ')) {
+    if (!w || PRODUCT_FILLER.has(w)) continue
+    keep.push(w)
+    if (keep.length >= 2) break
+  }
+  if (keep.length === 0) return 'Other'
+  return keep.map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
+}
+
 /**
  * Parse an earnings message into (product, breakNumber, team).
  *   "Earnings for selling a 2x Topps Chrome Break #3 - Cowboys"
@@ -460,6 +504,16 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
   // day -> { revenue, count } of earnings with NO Break #N, so the per-day
   // drill-down can show an "Unattributed sales" bucket and reconcile to gross.
   const perDayUnattributedMap = new Map()
+  // --- Product/sale-type analytics (over ALL earnings) ---------------------
+  // familyKey -> { productLabel, product, revenue, count } — revenue by product.
+  const productFamilyMap = new Map()
+  // saleType -> { revenue, count } — the team-break / case / box / random mix.
+  const saleTypeMap = new Map()
+  // `${day}|${familyKey}` -> { productLabel, revenue, count } — day drill-down
+  // by product (reconciles to the day's gross).
+  const perDayProductsMap = new Map()
+  // Costs & extras: giveaways, shipping subsidies, platform fees, tips.
+  const costs = { giveaways: 0, shippingSubsidies: 0, platformFees: 0, otherAdjustments: 0, tips: 0 }
   const daysSeen = new Set()
   const warnings = []
   let otherSampled = 0
@@ -480,6 +534,23 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         totals.grossEarnings += amt
         totals.earningCount += 1
         bumpDay(row.dayKey, 'gross', amt)
+        // Revenue by product family (ALL earnings, attributed or not), the
+        // sale-type mix, and the per-day product breakdown.
+        const famLabel = productFamily(row.product)
+        const famKey = famLabel.toUpperCase()
+        let fam = productFamilyMap.get(famKey)
+        if (!fam) { fam = { productLabel: famLabel, product: row.product, revenue: 0, count: 0 }; productFamilyMap.set(famKey, fam) }
+        fam.revenue += amt; fam.count += 1
+        const stype = classifySaleType(row)
+        let st = saleTypeMap.get(stype)
+        if (!st) { st = { revenue: 0, count: 0 }; saleTypeMap.set(stype, st) }
+        st.revenue += amt; st.count += 1
+        if (row.dayKey) {
+          const dpKey = `${row.dayKey}|${famKey}`
+          let dp = perDayProductsMap.get(dpKey)
+          if (!dp) { dp = { productLabel: famLabel, revenue: 0, count: 0 }; perDayProductsMap.set(dpKey, dp) }
+          dp.revenue += amt; dp.count += 1
+        }
         if (row.breakNumber != null) {
           const pkey = row.productKey
           // Group per-break by (dayKey, productKey, breakNumber) so the same
@@ -541,6 +612,12 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       case 'adjustment':
         totals.adjustments += amt
         totals.adjustmentCount += 1
+        // Bucket adjustments so the "Costs & extras" summary can explain them:
+        // shipping subsidies (money in), platform fees / boosts (money out), and
+        // any other positive adjustment (e.g. a seller bonus).
+        if (amt > 0 && /shipping\s*subsidy/i.test(row.message || '')) costs.shippingSubsidies += amt
+        else if (amt < 0) costs.platformFees += amt
+        else costs.otherAdjustments += amt
         break
       case 'tip':
         totals.tips += amt
@@ -607,10 +684,20 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
     })
   }
 
-  // perDay sorted ascending by day. breakdown = that day's break-attributed
-  // earning rows PLUS an "Unattributed sales" bucket, sorted by revenue DESC, so
-  // sum(breakdown.revenue) == that day's GROSS earnings (giveaways are day-level
-  // negatives shown separately, NOT part of the per-break breakdown).
+  // Per-day PRODUCT breakdown (cleaner than the per-break one for a day view):
+  // group each day's earnings by product family. sum(products.revenue) == gross.
+  const productsByDay = new Map()
+  for (const [key, v] of perDayProductsMap.entries()) {
+    const day = key.slice(0, key.indexOf('|'))
+    let list = productsByDay.get(day)
+    if (!list) { list = []; productsByDay.set(day, list) }
+    list.push({ productLabel: v.productLabel, revenue: round2(v.revenue), count: v.count })
+  }
+
+  // perDay sorted ascending by day. `products` is that day's revenue grouped by
+  // product family (sums to gross) — the drill-down the dashboard shows. The
+  // legacy `breakdown` (per-break + an "Unattributed sales" bucket) is kept for
+  // back-compat; both reconcile to the day's GROSS earnings.
   const perDay = [...perDayMap.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([day, v]) => ({
@@ -619,6 +706,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       giveaway: round2(v.giveaway),
       net: round2(v.gross + v.giveaway),
       count: v.count,
+      products: (productsByDay.get(day) || []).sort((a, b) => b.revenue - a.revenue),
       breakdown: (breakdownByDay.get(day) || []).sort((a, b) => b.revenue - a.revenue),
     }))
 
@@ -665,8 +753,45 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
   const avgRevenuePerBreak = totalBreaks ? attributedRevenue / totalBreaks : 0
   const avgRevenuePerCase = totalCases ? attributedRevenue / totalCases : 0
 
+  // Revenue by product family across ALL earnings (the dashboard's hero view).
+  // pctOfGross is each family's share of gross earnings; sum(revenue) == gross.
+  const grossForPct = totals.grossEarnings || 1
+  const revenueByProduct = [...productFamilyMap.values()]
+    .map((f) => ({
+      productLabel: f.productLabel,
+      product: f.product,
+      revenue: round2(f.revenue),
+      count: f.count,
+      avg: round2(f.count ? f.revenue / f.count : 0),
+      pctOfGross: round2((f.revenue / grossForPct) * 100),
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+
+  // Sale-type mix — reframes the old "unattributed" as real categories.
+  const saleTypeMix = [...saleTypeMap.entries()]
+    .map(([type, v]) => ({
+      type,
+      label: SALE_TYPE_LABELS[type] || type,
+      revenue: round2(v.revenue),
+      count: v.count,
+      pctOfGross: round2((v.revenue / grossForPct) * 100),
+    }))
+    .sort((a, b) => b.revenue - a.revenue)
+
+  // Costs & extras summary. giveaways/tips mirror the totals; adjustments are
+  // split into money-in (shipping subsidies) vs money-out (platform fees/boosts).
+  costs.giveaways = round2(totals.giveawayLost)
+  costs.tips = round2(totals.tips)
+  costs.shippingSubsidies = round2(costs.shippingSubsidies)
+  costs.platformFees = round2(costs.platformFees)
+  costs.otherAdjustments = round2(costs.otherAdjustments)
+  costs.adjustmentsNet = round2(costs.shippingSubsidies + costs.platformFees + costs.otherAdjustments)
+
   return {
     dateRange: { start, end, days },
+    revenueByProduct,
+    saleTypeMix,
+    costs,
     totals: {
       grossEarnings: round2(totals.grossEarnings),
       giveawayLost: round2(totals.giveawayLost),
