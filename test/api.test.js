@@ -8,6 +8,8 @@ import fs from 'node:fs'
 
 const require = createRequire(import.meta.url)
 const { createApp } = require('../server/index.cjs')
+const { Auth } = require('../server/auth.cjs')
+const { Store } = require('../server/store.cjs')
 
 let server
 let base
@@ -112,5 +114,104 @@ describe('data flows (demo dataset)', () => {
     expect(typeof dash.totalRevenue).toBe('number')
     const settings = await (await api('/api/settings')).json()
     expect(settings.hasData).toBe(true)
+  })
+})
+
+// Isolated from the ordered 'data flows' describe above: a FRESH app + dataDir so
+// wiping accounts here never disturbs the shared 'owner' user. All data synthetic.
+describe('reset-admin (return to first-run bootstrap)', () => {
+  let rServer
+  let rBase
+
+  function rapi(p, opts = {}) {
+    return fetch(rBase + p, {
+      ...opts,
+      headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
+    })
+  }
+
+  beforeAll(async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmcardz-reset-'))
+    const { app } = createApp({ dataDir })
+    await new Promise((resolve) => {
+      rServer = app.listen(0, '127.0.0.1', resolve)
+    })
+    rBase = `http://127.0.0.1:${rServer.address().port}`
+    // Bootstrap an admin so accounts EXIST (reset is a not-bootstrap recovery).
+    await rapi('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: 'admin1', password: 'secret', displayName: 'Admin One' }) })
+  })
+
+  afterAll(() => {
+    if (rServer) rServer.close()
+  })
+
+  it('rejects reset without an explicit confirm flag', async () => {
+    const noBody = await rapi('/api/auth/reset-admin', { method: 'POST' })
+    expect(noBody.status).toBe(400)
+    const falseConfirm = await rapi('/api/auth/reset-admin', { method: 'POST', body: JSON.stringify({ confirm: false }) })
+    expect(falseConfirm.status).toBe(400)
+    // Accounts still exist — nothing was wiped.
+    const status = await (await rapi('/api/auth/status')).json()
+    expect(status.needsBootstrap).toBe(false)
+  })
+
+  it('wipes accounts with { confirm: true } and returns to bootstrap', async () => {
+    const r = await rapi('/api/auth/reset-admin', { method: 'POST', body: JSON.stringify({ confirm: true }) })
+    expect(r.status).toBe(200)
+    const body = await r.json()
+    expect(body.ok).toBe(true)
+    expect(body.needsBootstrap).toBe(true)
+
+    const status = await (await rapi('/api/auth/status')).json()
+    expect(status.needsBootstrap).toBe(true)
+  })
+
+  it('lets a brand-new admin register again after reset', async () => {
+    const r = await rapi('/api/auth/register', { method: 'POST', body: JSON.stringify({ username: 'admin2', password: 'secret2', displayName: 'Admin Two' }) })
+    expect(r.status).toBe(201)
+    expect((await r.json()).user.role).toBe('admin')
+  })
+})
+
+// Direct unit test of the Auth class (no HTTP): drives resetToBootstrap()
+// against a real Store on a temp dir. Synthetic accounts only.
+describe('Auth.resetToBootstrap() (unit)', () => {
+  let dir
+  let auth
+
+  beforeAll(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmcardz-auth-'))
+    const store = new Store(dir)
+    auth = new Auth(store)
+    // Two synthetic accounts so we prove ALL of them get wiped, not just one.
+    await auth.createUser({ username: 'admin1', password: 'secret', displayName: 'Admin One' })
+    await auth.createUser({ username: 'picker1', password: 'pppp', role: 'picker' })
+  })
+
+  it('starts NOT in bootstrap while accounts exist', () => {
+    expect(auth.needsBootstrap()).toBe(false)
+    expect(auth.listUsers().length).toBe(2)
+  })
+
+  it('clears all users, invalidates sessions, and returns to bootstrap', async () => {
+    // Open a live session first so we can prove it gets invalidated.
+    const { token } = await auth.login({ username: 'admin1', password: 'secret' })
+    expect(auth.userForToken(token)).toBeTruthy()
+
+    const result = auth.resetToBootstrap()
+    expect(result).toEqual({ ok: true, needsBootstrap: true })
+
+    // Accounts gone -> first-run flow again.
+    expect(auth.needsBootstrap()).toBe(true)
+    expect(auth.listUsers()).toEqual([])
+    // The previously-valid token no longer resolves (sessions cleared).
+    expect(auth.userForToken(token)).toBe(null)
+  })
+
+  it('makes the next created user an admin again (fresh bootstrap)', async () => {
+    const { user } = await auth.createUser({ username: 'fresh', password: 'secret', role: 'picker' })
+    // First user after a reset is forced to admin regardless of requested role.
+    expect(user.role).toBe('admin')
+    expect(auth.needsBootstrap()).toBe(false)
   })
 })

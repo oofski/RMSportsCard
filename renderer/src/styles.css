@@ -13,8 +13,8 @@
   --line: #334155;
   --text: #e2e8f0;        /* slate-200 */
   --text-dim: #94a3b8;    /* slate-400 */
-  --accent: #38bdf8;      /* sky-400 */
-  --accent-2: #0ea5e9;
+  --accent: #5B8ED9;      /* RM brand blue (brighter for dark bg contrast) */
+  --accent-2: #3E6EB5;
   --good: #22c55e;
   --warn: #eab308;
   --bad: #ef4444;
@@ -32,8 +32,8 @@
   --line: #cbd5e1;
   --text: #0f172a;
   --text-dim: #64748b;
-  --accent: #0284c7;
-  --accent-2: #0ea5e9;
+  --accent: #3E6EB5;
+  --accent-2: #305A97;
   --good: #16a34a;
   --warn: #ca8a04;
   --bad: #dc2626;
@@ -82,7 +82,7 @@ button { font-family: inherit; }
 }
 .btn:hover { filter: brightness(1.12); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.btn-primary { background: var(--accent-2); border-color: var(--accent); color: #06283a; }
+.btn-primary { background: var(--accent-2); border-color: var(--accent); color: #ffffff; }
 .btn-ghost { background: transparent; }
 .btn-danger { background: #7f1d1d; border-color: var(--bad); }
 .btn-sm { padding: 6px 11px; font-size: 13px; }
@@ -154,7 +154,7 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .banner { padding: 10px 18px; display: flex; align-items: center; gap: 12px; font-weight: 600; }
 .banner.offline { background: #713f12; color: #fde68a; }
 .banner.synced { background: #14532d; color: #bbf7d0; }
-.banner.update { background: var(--accent-2); color: #06283a; }
+.banner.update { background: var(--accent-2); color: #ffffff; }
 .banner.error { background: #7f1d1d; color: #fecaca; }
 
 /* ---- Dropzone ----------------------------------------------------------- */
@@ -172,7 +172,7 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .stage-steps { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .stage-step { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text-dim); cursor: pointer; font-weight: 700; font-size: 13px; }
 .stage-step:hover { filter: brightness(1.18); }
-.stage-step.active { color: #06283a; border-color: transparent; }
+.stage-step.active { color: #ffffff; border-color: transparent; }
 .stage-arrow { color: var(--text-dim); }
 .team-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; margin: 3px; font-size: 14px; font-weight: 600; user-select: none; transition: transform 0.06s ease, filter 0.1s ease; }
 .team-chip:hover { filter: brightness(1.12); }

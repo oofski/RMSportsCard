@@ -11,6 +11,7 @@
 // =============================================================================
 
 import React from 'react'
+import Logo from './Logo.jsx'
 
 // Nav model — split icon/label so the collapsed rail can render icons only.
 // Keys must match the render switch in App.jsx.
@@ -40,7 +41,9 @@ export default function SideBar({
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
       <div className="sidebar-head">
-        {!collapsed && <span className="brand">RM<span className="dot"> ●</span> Cardz</span>}
+        <span className="brand">
+          {collapsed ? <Logo size={28} /> : <Logo withWordmark size={120} />}
+        </span>
         <button
           className="sidebar-toggle"
           onClick={onToggleCollapse}

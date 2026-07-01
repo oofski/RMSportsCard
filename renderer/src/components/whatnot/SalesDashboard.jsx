@@ -53,6 +53,8 @@ export default function SalesDashboard({ currentUser }) {
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false) // dropzone hover highlight
+  // Which "Revenue by Day" rows are expanded to show their per-break breakdown.
+  const [expandedDays, setExpandedDays] = useState(() => new Set())
 
   // Hidden <input type=file> used by the visible "Choose CSV…" / "Replace CSV"
   // buttons. `alive` guards setState after unmount (tab switched mid-request).
@@ -229,6 +231,17 @@ export default function SalesDashboard({ currentUser }) {
     byProduct = [],
   } = perCase
 
+  // Toggle a day row open/closed in the "Revenue by Day" drill-down. We copy the
+  // Set so React sees a new reference and re-renders.
+  const toggleDay = (day) => {
+    setExpandedDays((prev) => {
+      const next = new Set(prev)
+      if (next.has(day)) next.delete(day)
+      else next.add(day)
+      return next
+    })
+  }
+
   return (
     <div className="col" style={{ gap: 18 }}>
       {/* Hidden input drives the "Replace CSV" button on this screen too. */}
@@ -298,20 +311,58 @@ export default function SalesDashboard({ currentUser }) {
             // at 0% (no NaN / divide-by-zero). Clamp to >=0 so a negative-net day
             // (giveaways exceed gross) never yields an invalid negative width.
             const pct = maxNet > 0 ? Math.max(0, (net / maxNet) * 100) : 0
+            // Drill-down rows for this day (guard for older payloads with no
+            // breakdown). These sum to that day's GROSS break earnings, not net.
+            const breakdown = d.breakdown || []
+            const hasBreakdown = breakdown.length > 0
+            const isOpen = expandedDays.has(d.day)
             return (
-              <div
-                key={d.day}
-                className="row"
-                style={{ padding: '10px 14px', borderBottom: '1px solid var(--line)', gap: 14 }}
-              >
-                <span className="mono small nowrap" style={{ width: 96 }}>{d.day}</span>
-                <div className="bar" style={{ flex: 1 }}>
-                  <span style={{ width: pct + '%' }} />
+              <div key={d.day} style={{ borderBottom: '1px solid var(--line)' }}>
+                <div
+                  className="row"
+                  style={{
+                    padding: '10px 14px',
+                    gap: 14,
+                    cursor: hasBreakdown ? 'pointer' : 'default',
+                  }}
+                  onClick={hasBreakdown ? () => toggleDay(d.day) : undefined}
+                  role={hasBreakdown ? 'button' : undefined}
+                  aria-expanded={hasBreakdown ? isOpen : undefined}
+                >
+                  <span className="mono small nowrap" style={{ width: 14, opacity: hasBreakdown ? 1 : 0 }}>
+                    {isOpen ? '▾' : '▸'}
+                  </span>
+                  <span className="mono small nowrap" style={{ width: 96 }}>{d.day}</span>
+                  <div className="bar" style={{ flex: 1 }}>
+                    <span style={{ width: pct + '%' }} />
+                  </div>
+                  <span className="mono nowrap" style={{ width: 100, textAlign: 'right' }}>{money(net)}</span>
+                  <span className="muted small nowrap" style={{ width: 56, textAlign: 'right' }}>
+                    ({count(d.count)})
+                  </span>
                 </div>
-                <span className="mono nowrap" style={{ width: 100, textAlign: 'right' }}>{money(net)}</span>
-                <span className="muted small nowrap" style={{ width: 56, textAlign: 'right' }}>
-                  ({count(d.count)})
-                </span>
+                {isOpen && hasBreakdown && (
+                  <div style={{ padding: '4px 14px 12px 42px' }}>
+                    <div className="muted small" style={{ marginBottom: 4 }}>Breaks (gross)</div>
+                    {breakdown.map((entry, i) => (
+                      <div
+                        key={`${entry.product || ''}-${entry.breakNumber ?? i}`}
+                        className="row"
+                        style={{ gap: 12, padding: '3px 0' }}
+                      >
+                        <span className="small nowrap" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {entry.label || `Break ${entry.breakNumber ?? '—'}`}
+                        </span>
+                        <span className="mono small nowrap" style={{ width: 100, textAlign: 'right' }}>
+                          {money(entry.revenue)}
+                        </span>
+                        <span className="muted small nowrap" style={{ width: 56, textAlign: 'right' }}>
+                          ({count(entry.count)})
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )
           })}
@@ -408,9 +459,11 @@ export default function SalesDashboard({ currentUser }) {
                 <tr><td colSpan={4} className="muted">No breaks recorded.</td></tr>
               )}
               {topBreaks.map((b, i) => (
-                // Compose a stable key from product + break # (fall back to index).
-                <tr key={`${b.product || ''}-${b.breakNumber ?? i}`}>
-                  <td>{b.product || '—'}</td>
+                // Compose a stable key from day + product + break # (fall back to index).
+                <tr key={`${b.day || ''}-${b.product || ''}-${b.breakNumber ?? i}`}>
+                  {/* Prefer the enriched 'Break N · Product · Date' label; fall
+                      back to the raw product string on older/empty payloads. */}
+                  <td>{b.label || b.product || '—'}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>
                     {b.breakNumber != null ? `#${b.breakNumber}` : '—'}
                   </td>

@@ -3,6 +3,8 @@
 // -----------------------------------------------------------------------------
 //   GET    /api/auth/status        -> { needsBootstrap }  (no auth)
 //   POST   /api/auth/register      -> create user (open only during bootstrap)
+//   POST   /api/auth/reset-admin   -> wipe all accounts -> first-run (no auth;
+//                                     requires body { confirm: true })
 //   POST   /api/auth/login         -> { token, user }
 //   POST   /api/auth/logout        -> { ok }
 //   GET    /api/auth/me            -> current user
@@ -32,6 +34,18 @@ module.exports = function authRoutes({ auth, requireAuth, requireAdmin }) {
       const { user } = await auth.createUser(req.body || {})
       res.status(201).json({ user })
     } catch (err) { next(err) }
+  })
+
+  // Destructive "forgot password" recovery: clears ALL accounts (and live
+  // sessions) so the app returns to the first-run "create the admin" flow.
+  // Deliberately UNAUTHENTICATED — a locked-out user has no token, and the
+  // datastore is local (physical access is the real trust boundary). The
+  // explicit { confirm: true } flag guards against accidental calls.
+  router.post('/auth/reset-admin', (req, res) => {
+    if (!req.body || req.body.confirm !== true) {
+      return res.status(400).json({ error: 'Reset requires explicit confirmation.' })
+    }
+    res.json(auth.resetToBootstrap())
   })
 
   router.post('/auth/login', async (req, res, next) => {

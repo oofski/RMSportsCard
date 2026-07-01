@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
+import Logo from './Logo.jsx'
 
 // How often we re-poll the parse job while it is running (milliseconds).
 const POLL_INTERVAL_MS = 1500
@@ -198,8 +199,8 @@ export default function Upload({ onImported }) {
   return (
     <div className="center-screen">
       <div className="card" style={{ width: 560 }}>
-        <div className="brand" style={{ fontSize: 20, marginBottom: 4 }}>
-          RM<span className="dot"> ●</span> Cardz
+        <div style={{ marginBottom: 4 }}>
+          <Logo withWordmark size={120} />
         </div>
         <div className="muted small" style={{ marginBottom: 18 }}>
           Import a Whatnot order PDF to set up this event.

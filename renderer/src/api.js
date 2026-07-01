@@ -49,6 +49,10 @@ export const listUsers = () => request('/api/users')
 export const createUser = (payload) => request('/api/users', { method: 'POST', body: payload })
 export const updateUser = (id, payload) => request(`/api/users/${id}`, { method: 'PATCH', body: payload })
 export const deleteUser = (id) => request(`/api/users/${id}`, { method: 'DELETE' })
+// Destructive recovery: wipe all accounts so the app returns to first-run
+// bootstrap (create-admin). Requires an explicit { confirm: true } on the wire;
+// the route intentionally has no auth (a locked-out user has no token).
+export const resetAdmin = () => request('/api/auth/reset-admin', { method: 'POST', body: { confirm: true } })
 
 // ---- Parse / import -------------------------------------------------------
 export function uploadPdf(file) {

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="RM SPORTSCARDS">
+  <defs>
+    <linearGradient id="rmBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A7BC0"/>
+      <stop offset="1" stop-color="#3A64AB"/>
+    </linearGradient>
+  </defs>
+  <circle cx="256" cy="256" r="256" fill="url(#rmBlue)"/>
+  <!-- "RM": bold white letters with a thin inner blue rule that echoes the
+       brand's double-outline look while staying legible at small icon sizes. -->
+  <text x="256" y="238" text-anchor="middle" dominant-baseline="middle"
+        font-family="Arial, Helvetica, 'DejaVu Sans', sans-serif" font-weight="800"
+        font-size="196" letter-spacing="-6" fill="#ffffff">RM</text>
+  <text x="256" y="238" text-anchor="middle" dominant-baseline="middle"
+        font-family="Arial, Helvetica, 'DejaVu Sans', sans-serif" font-weight="800"
+        font-size="196" letter-spacing="-6" fill="none" stroke="#3A64AB" stroke-width="4">RM</text>
+  <!-- Wordmark -->
+  <text x="256" y="360" text-anchor="middle" dominant-baseline="middle"
+        font-family="Arial, Helvetica, 'DejaVu Sans', sans-serif" font-weight="700"
+        font-size="52" letter-spacing="7" fill="#ffffff">SPORTSCARDS</text>
+</svg>

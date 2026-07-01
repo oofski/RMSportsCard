@@ -36,6 +36,25 @@ class Auth {
     return this.users.length === 0
   }
 
+  /**
+   * Destructive recovery: wipe ALL accounts so the app returns to the first-run
+   * "create the admin account" flow — exactly like a fresh install. This is a
+   * "forgot password" escape hatch: the datastore is LOCAL to the user's
+   * machine, so physical access already implies full access, and a locked-out
+   * user has no token to authenticate with.
+   *
+   * Scope is intentionally accounts + sessions ONLY — ledger/orders/shipments/
+   * snapshots are left untouched. We clear via the store (the `users` getter has
+   * no setter), invalidate every live session token, and flush immediately.
+   * @returns {{ ok: true, needsBootstrap: true }}
+   */
+  resetToBootstrap() {
+    this.store.state.users = []
+    this.sessions.clear()
+    this.store.saveNow()
+    return { ok: true, needsBootstrap: true }
+  }
+
   _publicUser(u) {
     if (!u) return null
     const { passwordHash, ...rest } = u

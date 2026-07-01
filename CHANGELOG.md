@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.8] - 2026-07-01
+
+### Added / Changed — RM SPORTSCARDS rebrand + Sales Dashboard depth + admin recovery
+- **New RM SPORTSCARDS branding.** A new blue-circle "RM SPORTSCARDS" logo is the
+  app icon (installer, taskbar, window) and appears in-app on the sign-in card,
+  sidebar, loading screen and dashboard header. The whole UI accent shifts from
+  cyan to the brand **royal blue** (with a lighter shade on the dark theme for
+  contrast).
+- **Reset admin from the sign-in screen.** If you're locked out, the sign-in
+  screen now has a "Forgot password? Reset admin" recovery: a two-step confirm
+  clears the accounts and returns the app to first-run setup so you can create a
+  fresh admin, exactly like a new install. (Local app only — it never leaves your
+  machine, and requires an explicit confirmation.)
+- **Sales Dashboard breaks now show the pack + date.** Instead of a bare
+  "Break 8", each break reads **"Break 8 · Cosmic Chrome · Jun 28"** — the
+  simplified pack name and the day — so the same break number on different days
+  is no longer merged together.
+- **Per-day revenue drill-down.** Each "Revenue by Day" row expands to show what
+  made up that day's revenue: every break/pack contribution **plus an
+  "Unattributed sales" bucket, so the breakdown reconciles to the day's gross**
+  (no more "where did the rest of the day's revenue go?").
+- Revenue/giveaway/payout totals, the date range, and per-case math are
+  unchanged — verified against a real ledger export.
+
 ## [1.5.7] - 2026-06-30
 
 ### Fixed — USPS auto-check no longer stalls after the first ~20 packages

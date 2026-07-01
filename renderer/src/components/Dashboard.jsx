@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from 'react'
 import * as api from '../api.js'
 import { SHIPMENT_STATUSES, breakStatusLabel } from '../constants.js'
+import Logo from './Logo.jsx'
 
 /** Format a number as USD with two decimals. */
 function money(n) {
@@ -36,10 +37,13 @@ export default function Dashboard({ onGoTo }) {
   return (
     <div className="col" style={{ gap: 18 }}>
       {/* Event header */}
-      <div>
-        <h2>RM Cardz — Break Manager</h2>
-        <div className="muted">
-          {event?.name ? `Event: ${event.name}` : 'No event name'}{event?.date ? ` · ${event.date}` : ''}
+      <div className="row" style={{ gap: 12, alignItems: 'center' }}>
+        <Logo size={40} />
+        <div>
+          <h2 style={{ margin: 0 }}>RM Sports Cardz — Break Manager</h2>
+          <div className="muted">
+            {event?.name ? `Event: ${event.name}` : 'No event name'}{event?.date ? ` · ${event.date}` : ''}
+          </div>
         </div>
       </div>
 

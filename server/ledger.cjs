@@ -114,6 +114,72 @@ function productKeyOf(product) {
   return collapseWhitespace(product).toUpperCase().replace(/[!.\s]+$/, '')
 }
 
+// Sport words that end the "significant" portion of a Whatnot product string.
+const SPORT_WORDS = new Set(['FOOTBALL', 'BASEBALL', 'BASKETBALL', 'HOCKEY', 'SOCCER'])
+// Reverse of MONTHS (1 -> 'Jan'), built once for formatDayLabel.
+const MONTH_ABBR = Object.entries(MONTHS).reduce((acc, [name, num]) => {
+  acc[num] = name
+  return acc
+}, {})
+
+/**
+ * PURE, deterministic short label for a long Whatnot product string. Derives
+ * ONLY from the row string (never from breaksPerCase). Steps:
+ *   1. collapse whitespace
+ *   2. strip a leading 4-digit year ("2025 ") and a leading "Nx " quantity
+ *   3. cut the string at the first structural boundary: " HOBBY", " BOX",
+ *      " - ", " -", ",", "(", or a sport word (FOOTBALL/BASEBALL/...)
+ *   4. take the first ~2 significant words and Title-Case them
+ * Examples:
+ *   "1x COSMIC CHROME FOOTBALL HOBBY BOX- ..." -> "Cosmic Chrome"
+ *   "TIER ONE BASEBALL - NEW RELEASE!!"        -> "Tier One"
+ *   "2025 INCEPTION BASEBALL RANDOM TEAMS (2 BOXES)" -> "Inception"
+ * @param {string} product
+ * @returns {string}
+ */
+function simplifyProduct(product) {
+  let s = collapseWhitespace(product)
+  s = s.replace(/^\d{4}\s+/, '')     // leading 4-digit year
+  s = s.replace(/^\d+x\s*/i, '')     // leading "Nx " quantity
+  // Cut at the first structural boundary. Split on the words FIRST so a sport
+  // word terminates the significant portion, then also honor punctuation/dash.
+  const words = []
+  for (const raw of s.split(' ')) {
+    if (!raw) continue
+    const upper = raw.toUpperCase()
+    // Stop BEFORE structural markers / sport words.
+    if (upper === 'HOBBY' || upper === 'BOX' || upper === '-' || SPORT_WORDS.has(upper)) break
+    // Punctuation-embedded boundary (e.g. "BOX-", "TEAMS(2", "RELEASE!!", "A,B").
+    const cutIdx = raw.search(/[-(,]/)
+    if (cutIdx === 0) break
+    if (cutIdx > 0) {
+      const head = raw.slice(0, cutIdx)
+      const headUpper = head.toUpperCase()
+      if (headUpper && headUpper !== 'HOBBY' && headUpper !== 'BOX' && !SPORT_WORDS.has(headUpper)) {
+        words.push(head)
+      }
+      break
+    }
+    words.push(raw)
+    if (words.length >= 2) break // first ~2 significant words
+  }
+  const titled = words.map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+  return titled.join(' ')
+}
+
+/**
+ * PURE date label: "2026-06-28" -> "Jun 28". Derives only from the day key.
+ * @param {string} dayKey  YYYY-MM-DD
+ * @returns {string}
+ */
+function formatDayLabel(dayKey) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dayKey || ''))
+  if (!m) return String(dayKey || '')
+  const mon = MONTH_ABBR[Number(m[2])]
+  if (!mon) return String(dayKey || '')
+  return `${mon} ${Number(m[3])}`
+}
+
 /**
  * Parse an earnings message into (product, breakNumber, team).
  *   "Earnings for selling a 2x Topps Chrome Break #3 - Cowboys"
@@ -380,12 +446,20 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
 
   // day -> { gross, giveaway, count }
   const perDayMap = new Map()
-  // productKey -> { revenue, count } per break number, plus the display label.
-  // key = `${productKey} ${breakNumber}`
+  // Per-break revenue keyed by (dayKey, productKey, breakNumber) - the same
+  // break number on different days no longer merges. Value carries the display
+  // product label, the day, and a human label.
+  // key = `${dayKey}|${productKey}|${breakNumber}`
   const perBreakMap = new Map()
+  // Per-day drill-down: same (dayKey, productKey, breakNumber) key -> that day's
+  // break/product revenue contribution. Grouped back per-day at output time.
+  const perDayBreakdownMap = new Map()
   // productKey -> { product(display), breaks:Set<number>, revenue }
   const byProductMap = new Map()
   const unattributed = { count: 0, revenue: 0 }
+  // day -> { revenue, count } of earnings with NO Break #N, so the per-day
+  // drill-down can show an "Unattributed sales" bucket and reconcile to gross.
+  const perDayUnattributedMap = new Map()
   const daysSeen = new Set()
   const warnings = []
   let otherSampled = 0
@@ -408,14 +482,39 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         bumpDay(row.dayKey, 'gross', amt)
         if (row.breakNumber != null) {
           const pkey = row.productKey
-          const bkey = `${pkey} ${row.breakNumber}`
+          // Group per-break by (dayKey, productKey, breakNumber) so the same
+          // break number on different days/events no longer merges.
+          const bkey = `${row.dayKey}|${pkey}|${row.breakNumber}`
           let pb = perBreakMap.get(bkey)
           if (!pb) {
-            pb = { product: row.product, breakNumber: row.breakNumber, revenue: 0, count: 0 }
+            pb = {
+              product: row.product,
+              breakNumber: row.breakNumber,
+              day: row.dayKey,
+              label: `Break ${row.breakNumber} · ${simplifyProduct(row.product)} · ${formatDayLabel(row.dayKey)}`,
+              revenue: 0,
+              count: 0,
+            }
             perBreakMap.set(bkey, pb)
           }
           pb.revenue += amt
           pb.count += 1
+          // Per-day drill-down: only break-attributed earning rows contribute
+          // (giveaways/unattributed never leak in). Same composite key as above.
+          let db = perDayBreakdownMap.get(bkey)
+          if (!db) {
+            db = {
+              label: `Break ${row.breakNumber} · ${simplifyProduct(row.product)}`,
+              product: row.product,
+              breakNumber: row.breakNumber,
+              day: row.dayKey,
+              revenue: 0,
+              count: 0,
+            }
+            perDayBreakdownMap.set(bkey, db)
+          }
+          db.revenue += amt
+          db.count += 1
           let bp = byProductMap.get(pkey)
           if (!bp) { bp = { product: row.product, breaks: new Set(), revenue: 0 }; byProductMap.set(pkey, bp) }
           bp.breaks.add(row.breakNumber)
@@ -423,6 +522,14 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         } else {
           unattributed.count += 1
           unattributed.revenue += amt
+          // Also bucket unattributed earnings per day so the drill-down reconciles
+          // to the day's gross (attributed breaks + unattributed = gross).
+          if (row.dayKey) {
+            let ud = perDayUnattributedMap.get(row.dayKey)
+            if (!ud) { ud = { revenue: 0, count: 0 }; perDayUnattributedMap.set(row.dayKey, ud) }
+            ud.revenue += amt
+            ud.count += 1
+          }
         }
         break
       }
@@ -466,7 +573,44 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
   }
   const days = start && end ? dayDiff(start, end) + 1 : 0
 
-  // perDay sorted ascending by day.
+  // Group the per-day drill-down entries by their dayKey (first segment of the
+  // composite `${dayKey}|${productKey}|${breakNumber}` key). Each perDay row
+  // gets only its own day's break/product contributions.
+  const breakdownByDay = new Map()
+  for (const [key, v] of perDayBreakdownMap.entries()) {
+    const day = key.slice(0, key.indexOf('|'))
+    let list = breakdownByDay.get(day)
+    if (!list) { list = []; breakdownByDay.set(day, list) }
+    list.push({
+      label: v.label,
+      product: v.product,
+      breakNumber: v.breakNumber,
+      revenue: round2(v.revenue),
+      count: v.count,
+    })
+  }
+
+  // Append each day's UNATTRIBUTED earnings (sales with no Break #N) as a single
+  // bucket so the drill-down accounts for the WHOLE day's gross — otherwise a day
+  // dominated by unattributed sales would appear to lose most of its revenue.
+  for (const [day, ud] of perDayUnattributedMap.entries()) {
+    if (round2(ud.revenue) === 0 && ud.count === 0) continue
+    let list = breakdownByDay.get(day)
+    if (!list) { list = []; breakdownByDay.set(day, list) }
+    list.push({
+      label: 'Unattributed sales',
+      product: null,
+      breakNumber: null,
+      revenue: round2(ud.revenue),
+      count: ud.count,
+      unattributed: true,
+    })
+  }
+
+  // perDay sorted ascending by day. breakdown = that day's break-attributed
+  // earning rows PLUS an "Unattributed sales" bucket, sorted by revenue DESC, so
+  // sum(breakdown.revenue) == that day's GROSS earnings (giveaways are day-level
+  // negatives shown separately, NOT part of the per-break breakdown).
   const perDay = [...perDayMap.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0))
     .map(([day, v]) => ({
@@ -475,20 +619,27 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       giveaway: round2(v.giveaway),
       net: round2(v.gross + v.giveaway),
       count: v.count,
+      breakdown: (breakdownByDay.get(day) || []).sort((a, b) => b.revenue - a.revenue),
     }))
 
-  // perBreak: display product label; sorted by product then breakNumber.
+  // perBreak: keyed by (dayKey, productKey, breakNumber); carries the display
+  // product label, its day, and a human `label` ("Break 8 · Cosmic Chrome ·
+  // Jun 28"). Deterministic stable sort across days: product, then breakNumber,
+  // then day.
   const perBreak = [...perBreakMap.values()]
     .map((v) => ({
       product: v.product,
       breakNumber: v.breakNumber,
+      day: v.day,
+      label: v.label,
       revenue: round2(v.revenue),
       count: v.count,
     }))
     .sort((a, b) => {
       const p = a.product.localeCompare(b.product)
       if (p !== 0) return p
-      return a.breakNumber - b.breakNumber
+      if (a.breakNumber !== b.breakNumber) return a.breakNumber - b.breakNumber
+      return a.day.localeCompare(b.day)
     })
 
   // perCase: per product, breaks = #distinct break numbers, cases = ceil(breaks/bpc).
@@ -553,5 +704,5 @@ module.exports = {
   parseLedgerRows,
   analyzeLedger,
   // Exported for completeness / potential reuse; not part of the public contract.
-  _internal: { parseAmount, parseDayKey, parseSaleMessage, productKeyOf, classify, parseCsv },
+  _internal: { parseAmount, parseDayKey, parseSaleMessage, productKeyOf, classify, parseCsv, simplifyProduct, formatDayLabel },
 }

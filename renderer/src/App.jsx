@@ -15,6 +15,7 @@ import * as api from './api.js'
 import { setToken } from './api.js'
 
 import Login from './components/Login.jsx'
+import Logo from './components/Logo.jsx'
 import SideBar from './components/SideBar.jsx'
 import UpdateBanner from './components/UpdateBanner.jsx'
 import Upload from './components/Upload.jsx'
@@ -103,7 +104,14 @@ export default function App() {
   }
 
   if (booting) {
-    return <div className="center-screen"><div className="muted">Loading RM Cardz…</div></div>
+    return (
+      <div className="center-screen">
+        <div className="col" style={{ alignItems: 'center', gap: 12 }}>
+          <Logo withWordmark size={96} />
+          <div className="muted">Loading…</div>
+        </div>
+      </div>
+    )
   }
 
   // --- Gate 1: authentication ---------------------------------------------
@@ -111,7 +119,11 @@ export default function App() {
     return (
       <>
         <UpdateBanner />
-        <Login needsBootstrap={needsBootstrap} onAuthenticated={handleAuthenticated} />
+        <Login
+          needsBootstrap={needsBootstrap}
+          onAuthenticated={handleAuthenticated}
+          onNeedsBootstrap={() => setNeedsBootstrap(true)}
+        />
       </>
     )
   }
