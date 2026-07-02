@@ -50,7 +50,7 @@ export default function OrderTracking({ currentUser }) {
   return (
     <div className="col" style={{ gap: 14 }}>
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>📋 Order Tracking</h2>
+        <h2 style={{ margin: 0 }}>Order Tracking</h2>
         <span className="muted small">{visible.length} of {orders.length} orders</span>
       </div>
 
@@ -58,7 +58,7 @@ export default function OrderTracking({ currentUser }) {
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
         <select className="select" style={{ width: 'auto' }} value={filter} onChange={(e) => setFilter(e.target.value)} aria-label="Filter by status">
           <option value="all">All statuses</option>
-          {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.emoji} {s.label}</option>)}
+          {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
         </select>
         <input
           className="input"
@@ -81,10 +81,11 @@ export default function OrderTracking({ currentUser }) {
               <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
                 <strong>{o.customer.realName}</strong>
                 <span className="muted small">@{o.customer.handle}</span>
-                {o.customer.isNew && <span className="badge amber">NEW</span>}
+                {o.customer.isNew && <span className="badge amber">New</span>}
               </div>
-              <span className="order-status-pill" style={{ background: sd.color || 'var(--bg-3)' }}>
-                {sd.emoji} {sd.label || o.stage}
+              <span className="order-status-pill" style={{ '--pill': sd.color || '#9ca3af' }}>
+                <span className="dot" aria-hidden="true" />
+                {sd.label || o.stage}
               </span>
             </div>
 

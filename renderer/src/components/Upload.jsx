@@ -273,7 +273,7 @@ export default function Upload({ onImported }) {
         {phase === 'complete' && summary && (
           <div className="col">
             <div className="section-title" style={{ margin: 0, color: 'var(--good)' }}>
-              ✅ Parse complete — {summary.event.name} · {summary.event.date}
+              Parse complete — {summary.event.name} · {summary.event.date}
             </div>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <span className="mono">

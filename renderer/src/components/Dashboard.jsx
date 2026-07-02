@@ -92,7 +92,7 @@ export default function Dashboard({ onGoTo }) {
                 </div>
                 <span className="mono small" style={{ width: 64, textAlign: 'right' }}>{b.checkedTeams}/{b.totalTeams}</span>
                 <span className={`badge ${done ? 'green' : b.status === 'pending' ? '' : 'amber'}`} style={{ width: 90, justifyContent: 'center' }}>
-                  {done ? 'COMPLETE ✓' : breakStatusLabel(b.status)}
+                  {done ? 'Complete' : breakStatusLabel(b.status)}
                 </span>
               </div>
             )
@@ -105,7 +105,7 @@ export default function Dashboard({ onGoTo }) {
         <div className="row-between">
           <div className="section-title" style={{ margin: 0 }}>Module B — Shipping Overview</div>
           <div className="row" style={{ gap: 10 }}>
-            {exceptionCount > 0 && <span className="badge red">⚠️ {exceptionCount} exceptions</span>}
+            {exceptionCount > 0 && <span className="badge red">{exceptionCount} exceptions</span>}
             <button className="btn btn-sm" onClick={() => onGoTo('shipping')}>Open Shipping Tracker →</button>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function Dashboard({ onGoTo }) {
           <div className="stat-grid">
             {SHIPMENT_STATUSES.map((s) => (
               <div key={s.code} className="row" style={{ gap: 10 }}>
-                <span style={{ fontSize: 20 }}>{s.emoji}</span>
+                <span className="status-dot" style={{ background: s.color }} aria-hidden="true" />
                 <div className="col" style={{ gap: 0 }}>
                   <span className="value" style={{ fontSize: 22 }}>{shippingStats[s.code] || 0}</span>
                   <span className="muted small">{s.label}</span>

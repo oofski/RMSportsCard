@@ -12,15 +12,19 @@
 
 import React from 'react'
 import Logo from './Logo.jsx'
+import {
+  IconBox, IconCheckSquare, IconTruck, IconBarChart, IconClock,
+  IconSettings, IconLogOut, IconSun, IconMoon, IconUsers, IconUpload,
+} from './Icons.jsx'
 
 // Nav model — split icon/label so the collapsed rail can render icons only.
 // Keys must match the render switch in App.jsx.
 const NAV = [
-  { key: 'orders', icon: '📦', label: 'Orders' },
-  { key: 'checker', icon: '✅', label: 'Checker' },
-  { key: 'shipping', icon: '🚚', label: 'Shipping Tracker' },
-  { key: 'sales', icon: '💰', label: 'Sales Dashboard' },
-  { key: 'history', icon: '🗄', label: 'History' },
+  { key: 'orders', icon: <IconBox />, label: 'Orders' },
+  { key: 'checker', icon: <IconCheckSquare />, label: 'Checker' },
+  { key: 'shipping', icon: <IconTruck />, label: 'Shipping Tracker' },
+  { key: 'sales', icon: <IconBarChart />, label: 'Sales Dashboard' },
+  { key: 'history', icon: <IconClock />, label: 'History' },
 ]
 
 export default function SideBar({
@@ -71,15 +75,15 @@ export default function SideBar({
       )}
 
       <div className="sidebar-foot">
-        {onUploadNew && <FootItem icon="⬆" label="Upload New PDF" onClick={onUploadNew} />}
+        {onUploadNew && <FootItem icon={<IconUpload />} label="Upload New PDF" onClick={onUploadNew} />}
         <FootItem
-          icon={theme === 'light' ? '🌙' : '☀️'}
+          icon={theme === 'light' ? <IconMoon /> : <IconSun />}
           label={theme === 'light' ? 'Dark mode' : 'Light mode'}
           onClick={onToggleTheme}
         />
-        <FootItem icon="⚙️" label="Settings" onClick={onOpenSettings} />
-        {user.role === 'admin' && <FootItem icon="👥" label="Users" onClick={onOpenUsers} />}
-        <FootItem icon="⎋" label="Sign out" onClick={onLogout} />
+        <FootItem icon={<IconSettings />} label="Settings" onClick={onOpenSettings} />
+        {user.role === 'admin' && <FootItem icon={<IconUsers />} label="Users" onClick={onOpenUsers} />}
+        <FootItem icon={<IconLogOut />} label="Sign out" onClick={onLogout} />
         {!collapsed && (
           <div className="sidebar-user small muted">
             {user.displayName || user.username} · {user.role}

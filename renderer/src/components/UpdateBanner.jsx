@@ -24,16 +24,16 @@ export default function UpdateBanner() {
   if (['idle', 'checking', 'not-available'].includes(status)) return null
 
   if (status === 'available') {
-    return <div className="banner update">⬇️ A new version{info?.version ? ` (${info.version})` : ''} is available — downloading…</div>
+    return <div className="banner update">A new version{info?.version ? ` (${info.version})` : ''} is available — downloading…</div>
   }
   if (status === 'download-progress') {
     const pct = info && info.percent ? Math.round(info.percent) : 0
-    return <div className="banner update">⬇️ Downloading update… {pct}%</div>
+    return <div className="banner update">Downloading update… {pct}%</div>
   }
   if (status === 'downloaded') {
     return (
       <div className="banner update">
-        ✅ Update{info?.version ? ` ${info.version}` : ''} ready.
+        Update{info?.version ? ` ${info.version}` : ''} ready.
         <button className="btn btn-sm" style={{ marginLeft: 12 }} onClick={() => window.rmcardz.installUpdate()}>
           Restart &amp; Install
         </button>

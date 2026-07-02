@@ -99,16 +99,16 @@ export default function History({ currentUser }) {
   return (
     <div className="col" style={{ gap: 16 }}>
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>🗄 History</h2>
-        <button className="btn btn-primary btn-sm" onClick={saveSnapshot} disabled={busy}>＋ Save today’s snapshot</button>
+        <h2 style={{ margin: 0 }}>History</h2>
+        <button className="btn btn-primary btn-sm" onClick={saveSnapshot} disabled={busy}>Save today’s snapshot</button>
       </div>
 
       {/* Export the CURRENT live data straight to disk. */}
       <div className="card col" style={{ gap: 10 }}>
         <div className="section-title" style={{ margin: 0 }}>Export current data (CSV)</div>
         <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
-          <button className="btn btn-sm" onClick={() => doExport('orders', null, 'current')} disabled={busy}>⬇ Orders CSV</button>
-          <button className="btn btn-sm" onClick={() => doExport('shipping', null, 'current')} disabled={busy}>⬇ USPS Shipping CSV</button>
+          <button className="btn btn-sm" onClick={() => doExport('orders', null, 'current')} disabled={busy}>Orders CSV</button>
+          <button className="btn btn-sm" onClick={() => doExport('shipping', null, 'current')} disabled={busy}>USPS Shipping CSV</button>
         </div>
         <p className="muted small" style={{ margin: 0 }}>
           Saves a spreadsheet of the current event to your computer. Use “Save today’s snapshot” to keep a dated copy you can revisit and re-export later.

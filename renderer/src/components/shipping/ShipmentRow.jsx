@@ -81,12 +81,16 @@ export default function ShipmentRow({
         <td>
           <div className="row" style={{ gap: 8 }}>
             {isException && (
-              <span title="Exception — needs attention" aria-label="exception">
-                ⚠️
-              </span>
+              <span
+                className="status-dot"
+                style={{ background: 'var(--bad)' }}
+                role="img"
+                title="Exception — needs attention"
+                aria-label="exception"
+              />
             )}
             <span>{shipment.customer.realName}</span>
-            {shipment.customer.isNew && <span className="badge green small">NEW</span>}
+            {shipment.customer.isNew && <span className="badge green small">New</span>}
           </div>
         </td>
 
@@ -98,10 +102,10 @@ export default function ShipmentRow({
           {truncateTracking(shipment.trackingNumber)}
         </td>
 
-        {/* Status: emoji + a bound <select>. Optimistic change handled by parent. */}
+        {/* Status: colored dot + a bound <select>. Optimistic change handled by parent. */}
         <td onClick={(e) => e.stopPropagation()}>
           <div className="row nowrap" style={{ gap: 8 }}>
-            <span aria-hidden="true">{status.emoji}</span>
+            <span className="status-dot" style={{ background: status.color }} aria-hidden="true" />
             <select
               className="select"
               value={shipment.manualStatus.code}
@@ -110,7 +114,7 @@ export default function ShipmentRow({
             >
               {SHIPMENT_STATUSES.map((s) => (
                 <option key={s.code} value={s.code}>
-                  {s.emoji} {s.label}
+                  {s.label}
                 </option>
               ))}
             </select>
@@ -123,8 +127,9 @@ export default function ShipmentRow({
             type="button"
             className="btn btn-sm btn-ghost nowrap"
             onClick={() => onOpenUsps(shipment.uspsUrl)}
+            aria-label="Open USPS tracking"
           >
-            🌐 USPS
+            USPS
           </button>
         </td>
       </tr>
@@ -206,14 +211,14 @@ export default function ShipmentRow({
                     className="btn btn-sm"
                     onClick={() => onOpenUsps(shipment.uspsUrl)}
                   >
-                    🌐 Open USPS Tracking
+                    Open USPS Tracking
                   </button>
                   <button
                     type="button"
                     className="btn btn-sm btn-ghost"
                     onClick={() => onCopyTracking(shipment.trackingNumber)}
                   >
-                    📋 Copy Tracking #
+                    Copy Tracking #
                   </button>
                 </div>
               </div>

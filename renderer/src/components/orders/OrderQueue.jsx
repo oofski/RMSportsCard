@@ -209,9 +209,9 @@ export default function OrderQueue({ currentUser }) {
 
   const FILTERS = [
     { key: 'all', label: 'All' },
-    ...PIPELINE_STAGES.map((s) => ({ key: s.code, label: `${s.emoji} ${s.label}` })),
-    { key: 'flagged', label: '🔴 Flagged' },
-    { key: 'held', label: '⏸ Held' },
+    ...PIPELINE_STAGES.map((s) => ({ key: s.code, label: s.label })),
+    { key: 'flagged', label: 'Flagged' },
+    { key: 'held', label: 'Held' },
   ]
 
   // Manual reordering is only coherent when the displayed list == the full queue.
@@ -221,16 +221,16 @@ export default function OrderQueue({ currentUser }) {
     <div className="col" style={{ gap: 14 }}>
       {/* Toolbar */}
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>📦 Orders</h2>
+        <h2 style={{ margin: 0 }}>Orders</h2>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn-sm btn-ghost" onClick={resetQueue} title="Reset the manual queue order back to default">
-            ↩︎ Reset queue
+            Reset queue
           </button>
           {tracking
             ? <span className="badge amber">Checking USPS… {tracking.done}/{tracking.total}</span>
             : (
               <button className="btn btn-sm" onClick={refreshUsps} title="Read live delivery status from USPS and update Sent / All Good automatically">
-                🔄 Auto-update USPS status
+                Auto-update USPS status
               </button>
             )}
         </div>
@@ -282,19 +282,20 @@ export default function OrderQueue({ currentUser }) {
                 style={{ '--pill': sd.color || '#9ca3af' }}
                 onClick={(e) => e.stopPropagation()}
               >
-                {sd.emoji} {sd.label || o.stage}
+                <span className="dot" aria-hidden="true" />
+                {sd.label || o.stage}
               </span>
 
               <div className="order-row-id">
                 <strong>{o.customer.realName}</strong>
                 <span className="muted small">@{o.customer.handle}</span>
-                {o.customer.isNew && <span className="badge amber">NEW</span>}
+                {o.customer.isNew && <span className="badge amber">New</span>}
                 {o.multiCard && (
                   <span className="badge red" title={`Multiple cards (${o.cardCount}) across this order — double-check every card is packed`}>
-                    ⚠️ {o.cardCount} cards
+                    {o.cardCount} cards
                   </span>
                 )}
-                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>⏸</span>}
+                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>Held</span>}
               </div>
 
               {/* Slim at-a-glance: pick progress only (details live in the drop-down). */}
@@ -308,7 +309,7 @@ export default function OrderQueue({ currentUser }) {
               <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
                 {!sd.terminal && (
                   <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title={`Mark done → ${(stageByCode[nextStageCode(o.stage)] || {}).label}`}>
-                    ✓ Done
+                    Done
                   </button>
                 )}
                 <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} aria-label={isExpanded ? 'Hide teams' : 'Show teams'}>
@@ -350,12 +351,12 @@ export default function OrderQueue({ currentUser }) {
                 <div className="order-detail-actions">
                   {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
                   <span className="spacer" />
-                  <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? '▶ Resume' : '⏸ Hold'}</button>
-                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filter/search to reorder'}>↑</button>
-                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === visible.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filter/search to reorder'}>↓</button>
-                  {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)}>🌐 USPS</button>}
+                  <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? 'Resume' : 'Hold'}</button>
+                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filter/search to reorder'} aria-label="Move up">↑</button>
+                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === visible.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filter/search to reorder'} aria-label="Move down">↓</button>
+                  {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)} aria-label="Open USPS tracking">USPS</button>}
                   <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Set status" title="Set status">
-                    {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.emoji} {s.label}</option>)}
+                    {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
                   </select>
                 </div>
               </div>

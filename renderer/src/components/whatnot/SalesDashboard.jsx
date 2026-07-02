@@ -146,7 +146,7 @@ export default function SalesDashboard({ currentUser }) {
     return (
       <div className="center-screen">
         <div className="card" style={{ width: 560 }}>
-          <h2>💰 Sales Dashboard</h2>
+          <h2>Sales Dashboard</h2>
           <div className="muted small" style={{ marginBottom: 18 }}>
             Upload your Whatnot ledger CSV export to see revenue, per-day, per-break and
             per-case totals. Stripe payouts are ignored; giveaways are tracked as losses.
@@ -258,7 +258,7 @@ export default function SalesDashboard({ currentUser }) {
       {/* ---- Header row ----------------------------------------------------- */}
       <div className="row-between" style={{ alignItems: 'flex-start' }}>
         <div>
-          <h2>💰 Sales Dashboard</h2>
+          <h2>Sales Dashboard</h2>
           <div className="muted small">
             Ledger: {filename || '—'} · {dateRange.start || '?'} → {dateRange.end || '?'}{' '}
             ({count(dateRange.days)} days)
@@ -450,7 +450,7 @@ export default function SalesDashboard({ currentUser }) {
 
       {/* ---- 6. Team-break detail (secondary, collapsible) ----------------- */}
       <details className="panel" style={{ display: 'block', padding: 0 }}>
-        <summary style={{ cursor: 'pointer', fontWeight: 700, padding: '12px 14px' }}>
+        <summary style={{ cursor: 'pointer', fontWeight: 600, padding: '12px 14px' }}>
           Team-break detail · per-case ({count(perBreak.length)} break{perBreak.length === 1 ? '' : 's'})
         </summary>
         <div style={{ padding: '0 14px 14px' }}>
@@ -522,8 +522,8 @@ export default function SalesDashboard({ currentUser }) {
       {/* ---- Warnings (collapsible) ----------------------------------------- */}
       {warnings.length > 0 && (
         <details className="banner" style={{ borderRadius: 8, display: 'block' }}>
-          <summary style={{ cursor: 'pointer', fontWeight: 700 }}>
-            ⚠️ {count(warnings.length)} parse warning{warnings.length === 1 ? '' : 's'}
+          <summary style={{ cursor: 'pointer', fontWeight: 600 }}>
+            {count(warnings.length)} parse warning{warnings.length === 1 ? '' : 's'}
           </summary>
           <ul className="muted small" style={{ margin: '8px 0 0', paddingLeft: 20 }}>
             {warnings.map((w, i) => <li key={i}>{w}</li>)}

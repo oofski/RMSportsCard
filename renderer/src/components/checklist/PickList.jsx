@@ -57,12 +57,12 @@ export default function PickList({
       {/* ---- Sync banner (§6.5) ------------------------------------------- */}
       {syncState === 'offline' && (
         <div className="banner offline" style={{ borderRadius: 8, marginBottom: 12 }}>
-          📡 Offline — changes saved locally
+          Offline — changes saved locally
         </div>
       )}
       {syncState === 'synced' && (
         <div className="banner synced" style={{ borderRadius: 8, marginBottom: 12 }}>
-          ✅ Synced
+          Synced
         </div>
       )}
 
@@ -76,7 +76,7 @@ export default function PickList({
           BREAK #{brk.breakNumber} — {brk.eventName}
         </h2>
         <span className={`badge ${allChecked ? 'green' : 'amber'}`}>
-          {allChecked ? 'COMPLETE ✓' : `${pct}%`}
+          {allChecked ? 'Complete' : `${pct}%`}
         </span>
       </div>
 
@@ -92,8 +92,8 @@ export default function PickList({
       {/* ---- Completion prompt (§6.4) ------------------------------------- */}
       {allChecked && !promptDismissed && brk.status !== 'packed' && brk.status !== 'shipped' && (
         <div className="card" style={{ marginTop: 14, marginBottom: 4, borderColor: 'var(--good)' }}>
-          <div style={{ fontWeight: 800, marginBottom: 4 }}>
-            🎉 Break #{brk.breakNumber} Complete!
+          <div style={{ fontWeight: 650, marginBottom: 4 }}>
+            Break #{brk.breakNumber} complete
           </div>
           <div className="muted" style={{ marginBottom: 12 }}>
             All teams checked. Mark this break as PACKED?
@@ -126,7 +126,7 @@ export default function PickList({
           onClick={onMarkAllPacked}
           title="Check off every remaining team"
         >
-          Mark All Packed ✓
+          Mark All Packed
         </button>
         <button
           className="btn btn-danger"
@@ -134,7 +134,7 @@ export default function PickList({
           onClick={onClearAll}
           title="Uncheck every team on this break"
         >
-          Clear All ✗
+          Clear All
         </button>
       </div>
 
@@ -183,7 +183,7 @@ export default function PickList({
               <span className="team">
                 {slot.teamName}
                 {slot.isGiveaway && (
-                  <span className="badge amber small" style={{ marginLeft: 8 }}>GIVEAWAY</span>
+                  <span className="badge amber small" style={{ marginLeft: 8 }}>Giveaway</span>
                 )}
               </span>
               <span className="who">

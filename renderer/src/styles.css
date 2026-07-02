@@ -1,9 +1,11 @@
 /* =============================================================================
    RM Cardz — Design system
-   Dark, high-contrast UI tuned for two devices:
+   Quiet, professional ops-tool styling tuned for two devices:
      • Module A (Break Checklist): tablet, big tap targets (>=56px rows)
      • Module B (Shipping Tracker): desktop, dense table
    A small set of CSS variables + utility classes; feature components compose them.
+   Restraint rules: hairline borders over shadows, flat fills over gradients,
+   tints over solid status blocks, and tabular numerals wherever numbers align.
    ============================================================================= */
 
 :root {
@@ -18,7 +20,7 @@
   --good: #22c55e;
   --warn: #eab308;
   --bad: #ef4444;
-  --radius: 10px;
+  --radius: 8px;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
@@ -49,7 +51,7 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  font-size: 15px;
+  font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -64,29 +66,32 @@ button { font-family: inherit; }
 .col { display: flex; flex-direction: column; gap: 12px; }
 .spacer { flex: 1; }
 .muted { color: var(--text-dim); }
-.small { font-size: 13px; }
-.mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; }
+.small { font-size: 12.5px; }
+.mono { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-variant-numeric: tabular-nums; }
 .nowrap { white-space: nowrap; }
 .hidden { display: none; }
 
 /* ---- Top bar ------------------------------------------------------------ */
 /* Brand mark (used by the sidebar header). */
-.brand { font-weight: 800; letter-spacing: 0.5px; font-size: 18px; }
+.brand { font-weight: 650; letter-spacing: 0.02em; font-size: 18px; }
 .brand .dot { color: var(--accent); }
 
 /* ---- Buttons ------------------------------------------------------------ */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 9px 16px; border-radius: 8px; border: 1px solid var(--line);
+  padding: 9px 16px; border-radius: 7px; border: 1px solid var(--line);
   background: var(--bg-3); color: var(--text); cursor: pointer; font-weight: 600;
 }
-.btn:hover { filter: brightness(1.12); }
+.btn:hover { background: color-mix(in srgb, var(--text) 9%, var(--bg-3)); }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-primary { background: var(--accent-2); border-color: var(--accent); color: #ffffff; }
+.btn-primary:hover { background: var(--accent); }
 .btn-ghost { background: transparent; }
-.btn-danger { background: #7f1d1d; border-color: var(--bad); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
+.btn-danger { background: transparent; border-color: color-mix(in srgb, var(--bad) 45%, transparent); color: var(--bad); }
+.btn-danger:hover { background: color-mix(in srgb, var(--bad) 10%, transparent); }
 .btn-sm { padding: 6px 11px; font-size: 13px; }
-.btn-lg { padding: 13px 22px; font-size: 16px; }
+.btn-lg { padding: 13px 22px; font-size: 15px; }
 
 /* ---- Cards / panels ----------------------------------------------------- */
 .card {
@@ -94,34 +99,48 @@ button { font-family: inherit; }
   border-radius: var(--radius); padding: 18px;
 }
 .panel { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); }
-h1, h2, h3 { margin: 0 0 6px; }
-.section-title { font-size: 13px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); margin: 18px 0 10px; }
+h1, h2, h3 { margin: 0 0 6px; font-weight: 650; }
+h2 { font-size: 18px; letter-spacing: -0.01em; }
+.section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin: 14px 0 8px; }
 
 /* ---- Inputs ------------------------------------------------------------- */
 .input, .select, textarea.input {
-  width: 100%; padding: 10px 12px; border-radius: 8px;
+  width: 100%; padding: 10px 12px; border-radius: 7px;
   background: var(--bg); border: 1px solid var(--line); color: var(--text); font-size: 14px;
 }
 .input:focus, .select:focus { outline: none; border-color: var(--accent); }
 label.field { display: block; margin-bottom: 12px; }
 label.field > span { display: block; margin-bottom: 5px; color: var(--text-dim); font-size: 13px; }
 
+/* ---- Focus visibility ----------------------------------------------------
+   One consistent, visible focus ring for keyboard users on every interactive
+   surface: buttons, inputs, chips, nav items, and clickable rows. */
+.btn:focus-visible,
+.input:focus-visible, .select:focus-visible, textarea.input:focus-visible,
+.chip-filter:focus-visible, .stage-step:focus-visible, .team-chip:focus-visible,
+.nav-item:focus-visible, .sidebar-toggle:focus-visible,
+.pick-row:focus-visible, .order-row-main:focus-visible,
+table.grid tr.clickable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  outline-offset: 1px;
+}
+
 /* ---- Progress bar ------------------------------------------------------- */
-.bar { height: 10px; background: var(--bg); border-radius: 999px; overflow: hidden; border: 1px solid var(--line); }
-.bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+.bar { height: 6px; background: color-mix(in srgb, var(--line) 45%, transparent); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
 .bar.good > span { background: var(--good); }
 
 /* ---- Stat cards (dashboard) -------------------------------------------- */
 .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
-.stat { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
-.stat .label { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; }
-.stat .value { font-size: 28px; font-weight: 800; margin-top: 4px; }
+.stat { background: var(--bg-2); border: 1px solid color-mix(in srgb, var(--line) 60%, transparent); border-radius: var(--radius); padding: 16px; }
+.stat .label { color: var(--text-dim); font-size: 12px; }
+.stat .value { font-size: 22px; font-weight: 650; margin-top: 4px; font-variant-numeric: tabular-nums; }
 
 /* ---- Badges / pills ----------------------------------------------------- */
-.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; background: var(--bg-3); }
-.badge.red { background: #7f1d1d; color: #fecaca; }
-.badge.green { background: #14532d; color: #bbf7d0; }
-.badge.amber { background: #713f12; color: #fde68a; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px; border-radius: 6px; font-size: 11.5px; font-weight: 600; background: var(--bg-3); border: 1px solid transparent; }
+.badge.red { background: color-mix(in srgb, var(--bad) 15%, var(--bg-2)); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
+.badge.green { background: color-mix(in srgb, var(--good) 15%, var(--bg-2)); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.badge.amber { background: color-mix(in srgb, var(--warn) 15%, var(--bg-2)); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
 
 /* ---- Pick list rows (Module A — tablet) -------------------------------- */
 .pick-row {
@@ -130,17 +149,18 @@ label.field > span { display: block; margin-bottom: 5px; color: var(--text-dim);
   cursor: pointer; user-select: none;
 }
 .pick-row:hover { background: var(--bg-3); }
-.pick-row .check { width: 26px; height: 26px; border-radius: 6px; border: 2px solid var(--text-dim); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; font-weight: 800; }
+.pick-row .check { width: 26px; height: 26px; border-radius: 6px; border: 2px solid var(--text-dim); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; font-weight: 650; }
 .pick-row.checked { opacity: 0.55; }
 .pick-row.checked .team { text-decoration: line-through; color: var(--text-dim); }
 .pick-row.checked .check { background: var(--good); border-color: var(--good); color: #04210f; }
-.pick-row .team { font-weight: 700; font-size: 16px; flex: 1; }
+.pick-row .team { font-weight: 600; font-size: 16px; flex: 1; }
 .pick-row .who { color: var(--text-dim); font-size: 13px; }
 
 /* ---- Tables (Module B — desktop) --------------------------------------- */
 table.grid { width: 100%; border-collapse: collapse; }
 table.grid th, table.grid td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); }
-table.grid th { color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+table.grid th { color: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+table.grid td { font-variant-numeric: tabular-nums; }
 table.grid tr.clickable { cursor: pointer; }
 table.grid tr.clickable:hover { background: var(--bg-3); }
 table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
@@ -150,38 +170,41 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 50; }
 .modal { width: 100%; max-width: 640px; max-height: 86vh; overflow: auto; }
 
-/* ---- Banners ------------------------------------------------------------ */
-.banner { padding: 10px 18px; display: flex; align-items: center; gap: 12px; font-weight: 600; }
-.banner.offline { background: #713f12; color: #fde68a; }
-.banner.synced { background: #14532d; color: #bbf7d0; }
-.banner.update { background: var(--accent-2); color: #ffffff; }
-.banner.error { background: #7f1d1d; color: #fecaca; }
+/* ---- Banners ------------------------------------------------------------
+   Severity reads from the tint alone — no glyphs. Soft washes of the status
+   color keep them legible in both themes without shouting. */
+.banner { padding: 10px 18px; display: flex; align-items: center; gap: 12px; font-weight: 550; }
+.banner.offline { background: color-mix(in srgb, var(--warn) 14%, var(--bg-2)); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent); }
+.banner.synced { background: color-mix(in srgb, var(--good) 14%, var(--bg-2)); color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 30%, transparent); }
+.banner.update { background: color-mix(in srgb, var(--accent) 14%, var(--bg-2)); color: var(--text); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.banner.error { background: color-mix(in srgb, var(--bad) 14%, var(--bg-2)); color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 30%, transparent); }
 
 /* ---- Dropzone ----------------------------------------------------------- */
 .dropzone { border: 2px dashed var(--line); border-radius: var(--radius); padding: 48px; text-align: center; color: var(--text-dim); }
 .dropzone.drag { border-color: var(--accent); color: var(--text); background: var(--bg-2); }
 
 /* ---- Misc --------------------------------------------------------------- */
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-3); border: 1px solid var(--line); padding: 10px 18px; border-radius: 999px; box-shadow: var(--shadow); z-index: 60; }
-.status-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; }
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-3); border: 1px solid var(--line); padding: 10px 18px; border-radius: 8px; box-shadow: var(--shadow-sm); z-index: 60; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: 0 0 auto; }
 
 /* ---- Planner / order queue --------------------------------------------- */
 .order-card { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin-bottom: 12px; }
 .order-card.held { opacity: 0.62; }
 .order-card.flagged { box-shadow: inset 4px 0 0 var(--bad); }
 .stage-steps { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-.stage-step { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg); color: var(--text-dim); cursor: pointer; font-weight: 700; font-size: 13px; }
-.stage-step:hover { filter: brightness(1.18); }
+.stage-step { padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); color: var(--text-dim); cursor: pointer; font-weight: 550; font-size: 13px; }
+.stage-step:hover { background: color-mix(in srgb, var(--text) 7%, var(--bg)); }
 .stage-step.active { color: #ffffff; border-color: transparent; }
 .stage-arrow { color: var(--text-dim); }
-.team-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; margin: 3px; font-size: 14px; font-weight: 600; user-select: none; transition: transform 0.06s ease, filter 0.1s ease; }
-.team-chip:hover { filter: brightness(1.12); }
+.team-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 8px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg); cursor: pointer; margin: 3px; font-size: 14px; font-weight: 550; user-select: none; transition: transform 0.06s ease, background 0.1s ease; }
+.team-chip:hover { background: color-mix(in srgb, var(--text) 7%, var(--bg)); }
 .team-chip:active { transform: scale(0.97); }
 /* Checked = positive solid green (success), not a strike-through (deletion). */
-.team-chip.checked { background: var(--good); border-color: var(--good); color: #04210f; font-weight: 700; text-decoration: none; }
+.team-chip.checked { background: var(--good); border-color: var(--good); color: #04210f; font-weight: 600; text-decoration: none; }
+.team-chip.checked:hover { background: color-mix(in srgb, #000000 10%, var(--good)); }
 .break-group { margin: 10px 0; }
-.break-group .bk { display: flex; justify-content: space-between; align-items: center; color: var(--text-dim); font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
-.chip-filter { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text-dim); cursor: pointer; font-weight: 600; font-size: 13px; }
+.break-group .bk { display: flex; justify-content: space-between; align-items: center; color: var(--text-dim); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+.chip-filter { display: inline-flex; gap: 6px; align-items: center; padding: 6px 12px; border-radius: 7px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text-dim); cursor: pointer; font-weight: 550; font-size: 13px; }
 .chip-filter.active { border-color: var(--accent); color: var(--text); background: color-mix(in srgb, var(--accent) 16%, var(--bg-2)); }
 
 /* ---- App shell (left sidebar + main) ----------------------------------- */
@@ -204,45 +227,48 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .sidebar.collapsed .sidebar-head { justify-content: center; }
 .sidebar-toggle {
   background: transparent; border: 1px solid var(--line); color: var(--text-dim);
-  border-radius: 8px; cursor: pointer; padding: 4px 9px; font-weight: 700;
+  border-radius: 7px; cursor: pointer; padding: 4px 9px; font-weight: 600;
 }
 .sidebar-toggle:hover { color: var(--text); background: var(--bg-3); }
 .sidebar-nav { display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; }
 .sidebar-foot { margin-top: auto; display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; border-top: 1px solid var(--line); }
 .nav-item {
   display: flex; align-items: center; gap: 12px; width: 100%;
-  padding: 10px 12px; border-radius: 8px; border: 1px solid transparent;
-  background: transparent; color: var(--text-dim); font-weight: 600;
-  cursor: pointer; text-align: left;
+  padding: 10px 12px; border-radius: 7px; border: 1px solid transparent;
+  background: transparent; color: var(--text-dim); font-weight: 550;
+  cursor: pointer; text-align: left; font-size: 13.5px;
 }
 .nav-item:hover { color: var(--text); background: var(--bg-3); }
 .nav-item.active { color: var(--text); background: var(--bg-3); border-color: var(--accent); }
-.nav-icon { flex: 0 0 22px; text-align: center; font-size: 16px; }
+.nav-icon { flex: 0 0 22px; display: inline-flex; align-items: center; justify-content: center; }
+.nav-icon svg { display: block; }
 .nav-label { white-space: nowrap; overflow: hidden; }
 .sidebar.collapsed .nav-item { justify-content: center; gap: 0; padding: 10px 0; }
 .sidebar-user { padding: 8px 12px; line-height: 1.5; }
 
 /* ---- Planner: simplified order rows ------------------------------------ */
-.order-row { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; box-shadow: var(--shadow-sm); transition: border-color 0.12s ease, box-shadow 0.12s ease; }
+.order-row { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; transition: border-color 0.12s ease; }
 .order-row.held { opacity: 0.62; }
-.order-row.flagged { box-shadow: inset 4px 0 0 var(--bad), var(--shadow-sm); }
-.order-row.open { border-color: var(--accent); box-shadow: var(--shadow); }
+.order-row.flagged { box-shadow: inset 4px 0 0 var(--bad); }
+.order-row.open { border-color: var(--accent); }
 .order-row-main {
   display: grid;
   grid-template-columns: max-content minmax(180px, 1fr) max-content max-content;
   align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer;
 }
 .order-row-main:hover { background: var(--bg-3); }
-/* Calm, legible status pill: a soft tint of the stage color (--pill set inline). */
+/* Calm, legible status pill: a colored dot + a soft tint of the stage color
+   (--pill set inline). The dot carries the status color; the text stays quiet. */
 .order-status-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; white-space: nowrap;
   color: var(--text);
-  background: color-mix(in srgb, var(--pill, #9ca3af) 18%, var(--bg-2));
-  border: 1px solid color-mix(in srgb, var(--pill, #9ca3af) 45%, transparent);
+  background: color-mix(in srgb, var(--pill, #9ca3af) 14%, var(--bg-2));
+  border: 1px solid color-mix(in srgb, var(--pill, #9ca3af) 35%, transparent);
 }
+.order-status-pill .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pill, #9ca3af); flex: 0 0 auto; }
 .order-row-id { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.order-row-id strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; font-size: 15px; }
+.order-row-id strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; font-size: 14px; }
 .order-row-meta { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
 .order-row-actions { display: flex; align-items: center; gap: 8px; }
 .order-row-expand { padding: 6px 9px; }

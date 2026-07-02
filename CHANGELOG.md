@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.10] - 2026-07-02
+
+### Changed — UI polish: calmer, more professional look
+The interface read as "AI-generated" — emoji in every heading and button, shouty
+UPPERCASE labels, gradient bars, pill-shaped everything. A full visual pass:
+- **All emoji removed** from headings, buttons, banners, badges and status pills.
+  Sidebar navigation now uses crisp line icons; statuses show a small colored dot
+  + label instead of an emoji.
+- **Quieter typography** — smaller, lighter headings; sentence-case stat labels
+  ("Net revenue", not "NET REVENUE"); tabular numerals so money columns line up.
+- **Flatter, cleaner charts** — thin solid-blue progress/revenue bars (no
+  gradients or borders), softer badge tints, rectangular chips instead of pills,
+  hairline borders instead of drop shadows.
+- Copy cleanup ("Break #1 complete" instead of "🎉 Break #1 Complete!") and
+  visible keyboard-focus outlines throughout. Both dark and light themes updated.
+No functional changes — every button, filter, and workflow behaves exactly as before.
+
 ## [1.5.9] - 2026-07-01
 
 ### Changed — Sales Dashboard redesigned around what the ledger actually is

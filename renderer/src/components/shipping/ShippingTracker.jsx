@@ -355,7 +355,7 @@ export default function ShippingTracker({ currentUser }) {
   if (loadError) {
     return (
       <div className="container">
-        <div className="banner error">⚠️ {loadError}</div>
+        <div className="banner error">{loadError}</div>
       </div>
     )
   }
@@ -363,7 +363,7 @@ export default function ShippingTracker({ currentUser }) {
   return (
     <div className="container col" style={{ gap: 16 }}>
       {/* ---- Recoverable action error banner ------------------------------- */}
-      {actionError && <div className="banner error">⚠️ {actionError}</div>}
+      {actionError && <div className="banner error">{actionError}</div>}
 
       {/* ---- Toolbar: bulk USPS launch + copy all -------------------------- */}
       <div className="card col" style={{ gap: 10 }}>
@@ -377,7 +377,7 @@ export default function ShippingTracker({ currentUser }) {
               onClick={refreshUsps}
               title="Read live delivery status from USPS and update the board automatically"
             >
-              🔄 Auto-update status (USPS)
+              Auto-update status (USPS)
             </button>
           )}
           <button
@@ -386,10 +386,10 @@ export default function ShippingTracker({ currentUser }) {
             onClick={handleOpenAllBatches}
             disabled={batchInfo.batches.length === 0}
           >
-            🌐 Open All in USPS ({batchInfo.batches.length} batches)
+            Open All in USPS ({batchInfo.batches.length} batches)
           </button>
           <button type="button" className="btn" onClick={handleCopyAllTracking}>
-            📋 Copy All Tracking #s
+            Copy All Tracking #s
           </button>
         </div>
         <p className="muted small" style={{ margin: 0 }}>
@@ -401,7 +401,7 @@ export default function ShippingTracker({ currentUser }) {
             the background auto-check is on — so "live" is visible, not assumed. */}
         {api.isDesktop && (
           <p className="muted small" style={{ margin: 0 }} title={lastSyncAt ? new Date(lastSyncAt).toLocaleString() : 'No USPS sync yet'}>
-            🛰️ Last USPS check: <strong>{timeAgo(lastSyncAt)}</strong>
+            Last USPS check: <strong>{timeAgo(lastSyncAt)}</strong>
             {autoMinutes > 0
               ? ` · auto-checks every ${autoMinutes} min`
               : ' · auto-check off (turn it on in Settings)'}
@@ -416,9 +416,9 @@ export default function ShippingTracker({ currentUser }) {
         </div>
         <div className="row" style={{ gap: 18, flexWrap: 'wrap' }}>
           {SHIPMENT_STATUSES.map((s) => (
-            <span key={s.code} className="nowrap">
-              <span aria-hidden="true">{s.emoji}</span> {s.label}:{' '}
-              <strong>{summary.counts[s.code]}</strong>
+            <span key={s.code} className="row nowrap" style={{ gap: 7 }}>
+              <span className="status-dot" style={{ background: s.color }} aria-hidden="true" />
+              {s.label}: <strong>{summary.counts[s.code]}</strong>
             </span>
           ))}
         </div>
@@ -439,7 +439,7 @@ export default function ShippingTracker({ currentUser }) {
           <option value={FILTER_ALL}>All</option>
           {SHIPMENT_STATUSES.map((s) => (
             <option key={s.code} value={s.code}>
-              {s.emoji} {s.label}
+              {s.label}
             </option>
           ))}
           <option value={FILTER_NOT_UPDATED}>Not Updated</option>

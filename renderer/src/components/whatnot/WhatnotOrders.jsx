@@ -128,7 +128,7 @@ export default function WhatnotOrders({ currentUser }) {
     <div className="col" style={{ gap: 18 }}>
       {/* Header: title + a muted summary line reflecting the filtered view. */}
       <div>
-        <h2>🧾 Whatnot Orders</h2>
+        <h2>Whatnot Orders</h2>
         <div className="muted">
           Showing {filtered.length} of {orders.length} order{orders.length === 1 ? '' : 's'}
           {' · '}
@@ -214,7 +214,7 @@ export default function WhatnotOrders({ currentUser }) {
                         {customer.handle && (
                           <span className="muted small">@{customer.handle}</span>
                         )}
-                        {customer.isNew && <span className="badge">NEW</span>}
+                        {customer.isNew && <span className="badge">New</span>}
                       </div>
                     </td>
 
