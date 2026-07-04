@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.11] - 2026-07-04
+
+### Changed — Sales Dashboard rebuilt as a QuickBooks-style widget dashboard
+Modeled on a QuickBooks Online financial dashboard: clean cards, real charts,
+and tabs — built with hand-rolled SVG (no chart libraries).
+- **Tabs**: Overview · Revenue by day · Team breaks.
+- **Overview**: a KPI tile rail (Net revenue, Gross, Given away, Sales, Avg/day)
+  beside a large **"Net revenue by day" bar chart** with a real dollar axis,
+  gridlines, rounded bars and hover tooltips.
+- **"Revenue by product" donut** with a color legend (top 5 products + Other),
+  the gross total in the center, and hover tooltips — using a colorblind-safe,
+  validated palette in both themes.
+- **Sale-type mix** and **Costs & extras** widget cards complete the row.
+- "Revenue by day" tab keeps the expandable per-product drill-down; "Team
+  breaks" tab keeps the breaks-per-case control, per-case stats and top breaks.
+- Defensive rendering throughout: empty or partial ledgers show clean empty
+  states — never NaN or broken charts. All money totals unchanged.
+
 ## [1.5.10] - 2026-07-02
 
 ### Changed — UI polish: calmer, more professional look
