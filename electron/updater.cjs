@@ -2,16 +2,28 @@
 // RM Cardz — Auto-update
 // -----------------------------------------------------------------------------
 // Thin wrapper around electron-updater. On launch (packaged builds only) the app
-// checks the configured GitHub Releases feed (see electron-builder.yml -> publish)
-// for a newer version, downloads it in the background, and surfaces lifecycle
-// events to the renderer so the UI can show an "Update available / Restart to
-// install" banner. The user stays in control: nothing installs until they click.
+// checks the configured generic feed (see electron-builder.yml -> publish, which
+// serves dist/latest.yml over the GitHub "raw" CDN) for a newer version,
+// downloads it in the background, and surfaces lifecycle events to the renderer
+// so the UI can show an "Update available / Restart to install" banner. The user
+// stays in control: nothing installs until they click.
+//
+// The launch check is not enough on its own: this app is typically left open all
+// day, and a launch-only check would never fire again — so a release published
+// while the app is running would go unnoticed until the next full restart. We
+// therefore ALSO re-check on a background interval (RECHECK_MS). Periodic checks
+// are silent on failure (offline, transient CDN error) so the user is never
+// nagged by an error banner for a check they didn't ask for.
 // =============================================================================
 
 const { autoUpdater } = require('electron-updater')
 
+// How often to re-check the feed while the app stays open (ms).
+const RECHECK_MS = 4 * 60 * 60 * 1000 // 4 hours
+
 let getWindow = () => null
 let initialised = false
+let recheckTimer = null
 
 /** Push an update-status event to the renderer if a window exists. */
 function emit(status, info) {
@@ -42,8 +54,18 @@ function initAutoUpdate(windowGetter) {
   autoUpdater.on('update-downloaded', (info) => emit('downloaded', info))
   autoUpdater.on('error', (err) => emit('error', { message: String(err && err.message ? err.message : err) }))
 
-  // Initial silent check shortly after startup.
+  // Initial check on startup (surfaces an error banner if it fails, once).
   autoUpdater.checkForUpdates().catch((err) => emit('error', { message: String(err) }))
+
+  // Keep checking while the app stays open so a release published mid-session is
+  // still picked up without a manual restart. Silent on failure (no nag banner).
+  if (!recheckTimer) {
+    recheckTimer = setInterval(() => {
+      autoUpdater.checkForUpdates().catch(() => {})
+    }, RECHECK_MS)
+    // Don't let the timer keep the process alive on its own.
+    if (recheckTimer.unref) recheckTimer.unref()
+  }
 }
 
 /** Manual "Check for updates" trigger from the UI. */

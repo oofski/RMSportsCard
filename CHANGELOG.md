@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.13] - 2026-07-06
+
+### Fixed — Auto-update now finds new releases on its own
+The app only checked for updates once, at launch. Because RM Cardz is usually
+left open all day, a release published while it was running went unnoticed until
+the next full restart — so auto-update *looked* broken.
+- **Background re-check every 4 hours** in addition to the launch check, so a
+  new version is picked up without restarting. It downloads quietly in the
+  background and the banner then offers **Restart & Install** (nothing installs
+  mid-session without your click). Periodic checks are silent on failure, so a
+  brief offline moment never shows an error.
+- The update feed now ships the installer's **differential blockmap**, so future
+  updates download only the changed bytes instead of the whole installer.
+- Includes everything from 1.5.12 (MLB support in the PDF parser).
+
+*Note: this fix takes effect once you're on 1.5.13 — install this build once and
+future releases will update automatically.*
+
 ## [1.5.12] - 2026-07-06
 
 ### Added — MLB support: same PDF flow, pick your league
