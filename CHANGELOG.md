@@ -6,6 +6,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.12] - 2026-07-06
+
+### Added — MLB support: same PDF flow, pick your league
+The breaking-slip parser now understands **MLB (30 teams)** in addition to
+**NFL (32 teams)**. Upload the exact same Whatnot order PDF — everything works
+the same, just for a different league.
+- **Sport picker on the upload screen**: *Auto-detect* (default), *NFL*, or *MLB*.
+  Auto-detect reads the team names off the slip and picks the right league on
+  its own, so most uploads need no extra clicks.
+- Team names snap to the correct 30-team MLB slate (Yankees, Dodgers, Athletics,
+  Cardinals, Blue Jays, …). Cross-league lookalikes stay separate — an MLB
+  "San Francisco Giants" never gets confused with an NFL "Giants".
+- The per-break **fidelity audit is now sport-aware**: a break is measured
+  against the full 30-team MLB slate (or 32 NFL), so "missing teams" and the
+  "all teams captured" badge count the right total for the league.
+- The detected/selected league is stored with the import and shown on the parse
+  recap. **NFL behavior is unchanged** — existing NFL uploads parse exactly as
+  before.
+
 ## [1.5.11] - 2026-07-04
 
 ### Changed — Sales Dashboard rebuilt as a QuickBooks-style widget dashboard

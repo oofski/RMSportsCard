@@ -7,7 +7,19 @@ export const BREAK_STATUSES = reference.breakStatuses
 export const ORDER_STAGES = reference.orderStages
 export const USER_ROLES = reference.userRoles
 export const NFL_TEAMS = reference.nflTeams
+export const MLB_TEAMS = reference.mlbTeams
 export const TEAMS_PER_BREAK = reference.teamsPerBreak
+
+// Leagues the parser understands, plus the Upload picker's "Auto-detect" option.
+// `code` is what the upload sends to /api/parse (see api.uploadPdf).
+export const SPORTS = reference.sports // [{ code, label, teamsKey, teamsPerBreak }]
+export const SPORT_OPTIONS = [
+  { code: 'auto', label: 'Auto-detect' },
+  ...reference.sports.map((s) => ({ code: s.code, label: s.label })),
+]
+/** Human label for a sport code ('nfl' -> 'NFL', 'mlb' -> 'MLB'). */
+export const sportLabel = (code) =>
+  (reference.sports.find((s) => s.code === code) || { label: code ? String(code).toUpperCase() : '' }).label
 
 /** Map a shipment status code -> its display descriptor. */
 export const statusByCode = Object.fromEntries(SHIPMENT_STATUSES.map((s) => [s.code, s]))

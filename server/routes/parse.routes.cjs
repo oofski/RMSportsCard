@@ -26,12 +26,17 @@ module.exports = function parseRoutes({ db, requireAuth }) {
       // Lazy-require so a parser load error surfaces here, not at server boot.
       const { parsePdf } = require('../parser/index.cjs')
 
+      // Sport picker: multer surfaces non-file text fields on req.body. 'auto'
+      // (or absent) lets the parser auto-detect NFL vs MLB from the team names.
+      const sport = (req.body && req.body.sport) || 'auto'
+
       const job = db.createParseJob({ filename: req.file.originalname, totalPages: 0 })
 
       // Kick off async parsing — do NOT await; respond with the jobId now.
       ;(async () => {
         try {
           const dataset = await parsePdf(req.file.buffer, {
+            sport,
             onProgress: (p) => db.updateParseJob(job.id, {
               pagesProcessed: p.pagesProcessed || 0,
               totalPages: p.totalPages || job.totalPages,

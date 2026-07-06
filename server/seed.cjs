@@ -146,6 +146,7 @@ function demoDataset() {
 
   return {
     event: EVENT,
+    sport: 'nfl',
     breaks,
     teamSlots,
     customers,

@@ -1,9 +1,17 @@
-// Tests for NFL team-name normalization (server/parser/teams.cjs).
+// Tests for team-name normalization (server/parser/teams.cjs) — NFL + MLB.
 import { describe, it, expect } from 'vitest'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
-const { matchTeam, levenshtein, CANONICAL } = require('../server/parser/teams.cjs')
+const {
+  matchTeam,
+  levenshtein,
+  CANONICAL,
+  createTeamMatcher,
+  detectSport,
+  listTeams,
+  normalizeSport,
+} = require('../server/parser/teams.cjs')
 
 describe('matchTeam — exact (case/punctuation-insensitive)', () => {
   it('matches canonical names exactly', () => {
@@ -44,5 +52,70 @@ describe('levenshtein', () => {
     expect(levenshtein('kitten', 'sitting')).toBe(3)
     expect(levenshtein('abc', 'abc')).toBe(0)
     expect(levenshtein('', 'abc')).toBe(3)
+  })
+})
+
+// -----------------------------------------------------------------------------
+// Sport-aware matcher (NFL 32 / MLB 30) — createTeamMatcher / detectSport.
+// -----------------------------------------------------------------------------
+describe('createTeamMatcher — MLB', () => {
+  const mlb = createTeamMatcher('mlb')
+
+  it('exposes exactly the 30 MLB teams and matches each one', () => {
+    expect(mlb.sport).toBe('mlb')
+    expect(mlb.CANONICAL).toHaveLength(30)
+    for (const t of mlb.CANONICAL) expect(mlb.matchTeam(t).team).toBe(t)
+  })
+
+  it('matches the single-word "Athletics" and multi-word MLB names', () => {
+    expect(mlb.matchTeam('athletics').team).toBe('Athletics')
+    expect(mlb.matchTeam('St. Louis Cardinals').team).toBe('St. Louis Cardinals')
+    expect(mlb.matchTeam('San Francisco Giants').team).toBe('San Francisco Giants')
+  })
+
+  it('fuzzy-matches a small MLB typo within edit distance 2', () => {
+    const m = mlb.matchTeam('Toronto Blue Jay') // missing trailing "s"
+    expect(m.team).toBe('Toronto Blue Jays')
+    expect(m.distance).toBeLessThanOrEqual(2)
+  })
+
+  it('does NOT bleed NFL names into MLB (and vice-versa)', () => {
+    // "San Francisco Giants" (MLB) must not resolve under the NFL matcher, and
+    // "New York Giants" (NFL) must not resolve under the MLB matcher.
+    expect(createTeamMatcher('nfl').matchTeam('San Francisco Giants').team).toBeNull()
+    expect(mlb.matchTeam('New York Giants').team).toBeNull()
+  })
+
+  it('unknown sport falls back to NFL (32 teams)', () => {
+    const m = createTeamMatcher('nba') // not a real sport here
+    expect(m.sport).toBe('nfl')
+    expect(m.CANONICAL).toHaveLength(32)
+  })
+})
+
+describe('detectSport', () => {
+  it('classifies a batch of MLB names as mlb', () => {
+    expect(detectSport(['New York Yankees', 'Athletics', 'San Francisco Giants'])).toBe('mlb')
+  })
+  it('classifies a batch of NFL names as nfl', () => {
+    expect(detectSport(['Kansas City Chiefs', 'New York Giants', 'Dallas Cowboys'])).toBe('nfl')
+  })
+  it('defaults to nfl on empty / unrecognizable input', () => {
+    expect(detectSport([])).toBe('nfl')
+    expect(detectSport(['Not A Team', 'Zzz Qqq'])).toBe('nfl')
+  })
+})
+
+describe('sport helpers', () => {
+  it('listTeams returns the right slate per sport', () => {
+    expect(listTeams('nfl')).toHaveLength(32)
+    expect(listTeams('mlb')).toHaveLength(30)
+    expect(listTeams('mlb')).toContain('Athletics')
+  })
+  it('normalizeSport validates codes and defaults to nfl', () => {
+    expect(normalizeSport('mlb')).toBe('mlb')
+    expect(normalizeSport('NFL')).toBe('nfl')
+    expect(normalizeSport('auto')).toBe('nfl')
+    expect(normalizeSport(undefined)).toBe('nfl')
   })
 })

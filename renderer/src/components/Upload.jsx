@@ -19,6 +19,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../api.js'
+import { SPORT_OPTIONS, sportLabel } from '../constants.js'
 import Logo from './Logo.jsx'
 
 // How often we re-poll the parse job while it is running (milliseconds).
@@ -29,6 +30,7 @@ export default function Upload({ onImported }) {
   const [phase, setPhase] = useState('idle') // see header for the state machine
   const [dragging, setDragging] = useState(false) // dropzone hover highlight
   const [file, setFile] = useState(null) // the chosen File (null until selected)
+  const [sport, setSport] = useState('auto') // league picker: auto | nfl | mlb
   const [jobId, setJobId] = useState(null) // parse job id returned by uploadPdf
   const [progress, setProgress] = useState(null) // latest parseStatus payload
   const [summary, setSummary] = useState(null) // event summary once complete
@@ -113,7 +115,7 @@ export default function Upload({ onImported }) {
     setErrorMessage(null)
 
     try {
-      const { jobId: id } = await api.uploadPdf(file)
+      const { jobId: id } = await api.uploadPdf(file, sport)
       if (!mountedRef.current) return
       setJobId(id)
 
@@ -157,7 +159,7 @@ export default function Upload({ onImported }) {
       setErrorMessage(friendlyError(err))
       setPhase('error')
     }
-  }, [file, stopPolling])
+  }, [file, sport, stopPolling])
 
   // Reset everything back to the start so the operator can pick another file.
   const retry = () => {
@@ -238,6 +240,25 @@ export default function Upload({ onImported }) {
               onChange={onInputChange}
             />
 
+            {/* Sport picker — same PDF flow, different league. "Auto-detect"
+                lets the parser infer NFL vs MLB from the team names. */}
+            <div className="col" style={{ gap: 6, marginTop: 14 }}>
+              <div className="muted small">Sport / league</div>
+              <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+                {SPORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.code}
+                    type="button"
+                    className={`btn btn-sm${sport === opt.code ? ' btn-primary' : ''}`}
+                    aria-pressed={sport === opt.code}
+                    onClick={() => setSport(opt.code)}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="row" style={{ marginTop: 14 }}>
               <button className="btn" onClick={openPicker}>
                 {file ? 'Choose a different PDF' : 'Choose PDF…'}
@@ -275,6 +296,14 @@ export default function Upload({ onImported }) {
             <div className="section-title" style={{ margin: 0, color: 'var(--good)' }}>
               Parse complete — {summary.event.name} · {summary.event.date}
             </div>
+            {summary.sport && (
+              <div className="row">
+                <span className="badge">{sportLabel(summary.sport)}</span>
+                {sport === 'auto' && (
+                  <span className="muted small">detected automatically</span>
+                )}
+              </div>
+            )}
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <span className="mono">
                 {summary.customers} customers · {summary.breaks} breaks ·{' '}

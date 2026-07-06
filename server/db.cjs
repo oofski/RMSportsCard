@@ -47,6 +47,9 @@ class Db {
     const s = this.store.state
     s.meta.importedAt = now()
     s.meta.event = dataset.event || { name: null, date: null }
+    // Which league this import was parsed as ('nfl' | 'mlb'). Defaults to NFL so
+    // datasets from older parsers (no sport field) behave exactly as before.
+    s.meta.sport = dataset.sport || 'nfl'
     s.breaks = dataset.breaks || []
     s.teamSlots = dataset.teamSlots || []
     s.customers = dataset.customers || []
@@ -66,6 +69,7 @@ class Db {
     const totalRevenue = s.orders.reduce((sum, o) => sum + (Number(o.price) || 0), 0)
     return {
       event: s.meta.event,
+      sport: s.meta.sport || 'nfl',
       importedAt: s.meta.importedAt,
       customers: s.customers.length,
       breaks: s.breaks.length,

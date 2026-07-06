@@ -28,7 +28,7 @@
 // =============================================================================
 
 const { extractPages } = require('./pdf.cjs')
-const { matchTeam, CANONICAL } = require('./teams.cjs')
+const { createTeamMatcher, detectSport, SPORTS } = require('./teams.cjs')
 const { buildUspsUrl, buildBatchUrls } = require('./batchUrls.cjs')
 const RX = require('./regex.cjs')
 
@@ -188,8 +188,11 @@ function groupByCustomer(pages) {
 // Returns { realName, breaks: [{ breakNumber, orderIds:[...], teams:[raw,...] }] }.
 // Each "Break #N" header opens a section; every "__ Team Name" line until the
 // next "Break #" / "Total:" / end of page is one purchased team slot.
+//
+// `matchTeam` is the sport-bound matcher (see teams.cjs). It is only consulted
+// by the glyph-loss FALLBACK below to decide whether a bare line is a real team.
 // =============================================================================
-function parseBreakingSlip(block) {
+function parseBreakingSlip(block, matchTeam) {
   let realName = null
   // Map breakNumber -> { breakNumber, orderIds:Set, teams:[raw,...] }, so the
   // same break appearing across multiple breaking-slip pages merges cleanly.
@@ -260,7 +263,8 @@ function parseBreakingSlip(block) {
 
       // FALLBACK — recover a team whose checkbox glyph did not survive text
       // extraction. Inside a break section, a non-structural line that
-      // confidently resolves to a known NFL team IS a purchased slot. Without
+      // confidently resolves to a known team (for this sport) IS a purchased
+      // slot. Without
       // this, any breaking slip whose checkboxes render as an unknown glyph would
       // yield ZERO teams and silently fall back to the noisy packing slip — the
       // exact "losing fidelity" failure. We strip any leading marker remnant and
@@ -290,8 +294,11 @@ function parseBreakingSlip(block) {
 // Tracking: comes from the LAST packing-slip page that carries a USPS line —
 // the whole customer ships as ONE parcel, so one tracking number is shared. We
 // iterate pages in order and overwrite, so the last-seen value wins.
+//
+// `matchTeam` is the sport-bound matcher (see teams.cjs), used to canonicalize
+// the team text that follows each "Break #N" on a per-order line.
 // =============================================================================
-function parsePackingSlip(block) {
+function parsePackingSlip(block, matchTeam) {
   let realName = null
   let address = null
   let isNew = false
@@ -445,16 +452,76 @@ function extractEvent(block, event) {
   }
 }
 
+// Gather raw team strings for sport auto-detection, WITHOUT canonicalizing them
+// (detection must not presuppose a sport). We read breaking-slip checkbox names
+// (ground truth) plus the "Break #N <team>" text from packing slips (so a
+// packing-only PDF can still be classified). We ALSO include bare, non-structural
+// breaking-slip lines — the exact glyph-loss case parseBreakingSlip's fallback
+// recovers — so an MLB slip whose checkbox markers didn't survive extraction is
+// still classified as MLB instead of silently defaulting to NFL. Detection only
+// SCORES candidates that match a sport's list, so non-team noise is harmless.
+// Cheap, best-effort, never throws.
+function collectTeamCandidates(blocks) {
+  const out = []
+  for (const block of blocks) {
+    for (const { page } of block.breakingPages) {
+      for (const line of toLines(page)) {
+        const cb = line.match(RX.TEAM_CHECKBOX)
+        if (cb) {
+          const raw = cb[1].trim()
+          if (raw && !/^Item\(s\)$/i.test(raw) && !/^\d+\s+Item\(s\)$/i.test(raw)) out.push(raw)
+          continue
+        }
+        // Glyph-loss recovery (mirrors the fallback in parseBreakingSlip): a
+        // non-structural bare line MAY be a team whose checkbox marker was lost.
+        if (isStructuralBreakLine(line)) continue
+        const stripped = line.replace(/^[^A-Za-z0-9]+/, '').trim()
+        if (stripped) out.push(stripped)
+      }
+    }
+    for (const { page } of block.packingPages) {
+      const lines = toLines(page)
+      for (let i = 0; i < lines.length; i++) {
+        if (!RX.ORDER_ID.test(lines[i])) continue
+        let end = i + 1
+        while (end < lines.length && end < i + 8 && !RX.ORDER_ID.test(lines[end])) end++
+        const windowText = lines.slice(i, end).join(' ')
+        const bm = windowText.match(RX.BREAK_NUMBER)
+        if (!bm) continue
+        const after = windowText.slice(windowText.indexOf(bm[0]) + bm[0].length)
+        const candidate = after
+          .replace(/^[\s:|,–—-]*/, '')
+          .replace(/\$[0-9.]+.*$/, '')
+          .replace(/Order\s+\d+.*$/, '')
+          .trim()
+        if (candidate) out.push(candidate)
+      }
+    }
+  }
+  return out
+}
+
 // =============================================================================
 // parsePages — the pure, testable core.
+// -----------------------------------------------------------------------------
+// `sport` selects the canonical team list teams are snapped to: 'nfl' | 'mlb'
+// force a league; 'auto' (or omitted/unknown) auto-detects it from the parsed
+// team names so the same PDF flow serves either league unchanged.
 // =============================================================================
-function parsePages(pages, { onProgress } = {}) {
+function parsePages(pages, { onProgress, sport } = {}) {
   pages = Array.isArray(pages) ? pages : []
   const warnings = []
   const event = { name: null, date: null }
 
   // STEP 1 — group pages into per-customer blocks keyed by handle.
   const blocks = groupByCustomer(pages)
+
+  // Resolve the sport, then build the matcher/canonical list ONCE for this parse.
+  // An explicit, known sport code wins; anything else ('auto', blank, garbage)
+  // auto-detects from the raw team names on the slips.
+  const explicit = String(sport || '').toLowerCase().trim()
+  const resolvedSport = SPORTS[explicit] ? explicit : detectSport(collectTeamCandidates(blocks))
+  const { matchTeam, CANONICAL } = createTeamMatcher(resolvedSport)
 
   // Accumulators for the normalized dataset.
   const breakNumbers = new Set() // every break number that actually appears
@@ -470,9 +537,9 @@ function parsePages(pages, { onProgress } = {}) {
     const handle = block.handle
 
     // STEP 2 — breaking slip = ground truth (teams per break).
-    const breaking = parseBreakingSlip(block)
+    const breaking = parseBreakingSlip(block, matchTeam)
     // STEP 3 — packing slip = identity + shipping + per-order facts.
-    const packing = parsePackingSlip(block)
+    const packing = parsePackingSlip(block, matchTeam)
 
     extractEvent(block, event)
 
@@ -659,13 +726,13 @@ function parsePages(pages, { onProgress } = {}) {
   // ---------------------------------------------------------------------------
   // PER-BREAK FIDELITY AUDIT (across ALL customers)
   // ---------------------------------------------------------------------------
-  // A break is a single case slot for every one of the 32 NFL teams, and a given
-  // team belongs to exactly ONE customer per break (spec §2.3). After building
-  // every team slot we audit each break so fidelity loss is VISIBLE rather than
-  // silent: how many of the 32 teams we captured, which are missing, and whether
-  // any team was assigned to more than one customer (a true data error). The
-  // missing list is informational (not every team is necessarily sold), but a
-  // COLLISION is surfaced as a hard warning.
+  // A break is a single case slot for every one of the sport's teams (32 NFL /
+  // 30 MLB), and a given team belongs to exactly ONE customer per break (spec
+  // §2.3). After building every team slot we audit each break so fidelity loss
+  // is VISIBLE rather than silent: how many of the full slate we captured, which
+  // are missing, and whether any team was assigned to more than one customer (a
+  // true data error). The missing list is informational (not every team is
+  // necessarily sold), but a COLLISION is surfaced as a hard warning.
   const breakAudit = [...breakNumbers]
     .sort((a, b) => a - b)
     .map((n) => {
@@ -694,9 +761,11 @@ function parsePages(pages, { onProgress } = {}) {
         breakNumber: n,
         teamCount: slots.length, // total purchased slots (may exceed distinct if duplicated)
         distinctTeamCount: byTeam.size,
-        maxTeams: CANONICAL.length, // 32
+        maxTeams: CANONICAL.length, // 32 (NFL) / 30 (MLB)
         missingCount: missingTeams.length,
         missingTeams,
+        // Kept as `hasAll32` for back-compat; means "captured the full slate"
+        // (all 32 NFL or all 30 MLB teams) for this sport.
         hasAll32: missingTeams.length === 0,
         collisions,
       }
@@ -707,6 +776,7 @@ function parsePages(pages, { onProgress } = {}) {
 
   return {
     event,
+    sport: resolvedSport, // which league's canonical list this parse was snapped to
     breaks,
     breakAudit,
     teamSlots,
@@ -722,12 +792,13 @@ function parsePages(pages, { onProgress } = {}) {
 /**
  * Production entry point: extract text from a PDF buffer, then parse it.
  * @param {Buffer} buffer
- * @param {{ onProgress?: Function }} [opts]
+ * @param {{ onProgress?: Function, sport?: string }} [opts]
+ *        sport: 'nfl' | 'mlb' to force a league, or 'auto'/omitted to detect it.
  * @returns {Promise<object>} normalized dataset (see db.cjs contract)
  */
-async function parsePdf(buffer, { onProgress } = {}) {
+async function parsePdf(buffer, { onProgress, sport } = {}) {
   const pages = await extractPages(buffer)
-  return parsePages(pages, { onProgress })
+  return parsePages(pages, { onProgress, sport })
 }
 
 module.exports = { parsePdf, parsePages }

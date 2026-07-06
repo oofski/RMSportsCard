@@ -55,9 +55,11 @@ export const deleteUser = (id) => request(`/api/users/${id}`, { method: 'DELETE'
 export const resetAdmin = () => request('/api/auth/reset-admin', { method: 'POST', body: { confirm: true } })
 
 // ---- Parse / import -------------------------------------------------------
-export function uploadPdf(file) {
+// sport: 'auto' (detect NFL vs MLB from the PDF), or force 'nfl' / 'mlb'.
+export function uploadPdf(file, sport = 'auto') {
   const form = new FormData()
   form.append('file', file)
+  form.append('sport', sport || 'auto')
   return request('/api/parse', { method: 'POST', body: form, isForm: true })
 }
 export const parseStatus = (jobId) => request(`/api/parse/status/${jobId}`)

@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared reference data consumed by BOTH the Node backend (require) and the React renderer (import). Single source of truth for the 32 NFL teams and the manual shipment status taxonomy.",
+  "_comment": "Shared reference data consumed by BOTH the Node backend (require) and the React renderer (import). Single source of truth for the per-sport team lists (32 NFL / 30 MLB) and the manual shipment status taxonomy.",
   "nflTeams": [
     "Arizona Cardinals", "Atlanta Falcons", "Baltimore Ravens", "Buffalo Bills",
     "Carolina Panthers", "Chicago Bears", "Cincinnati Bengals", "Cleveland Browns",
@@ -9,6 +9,20 @@
     "Minnesota Vikings", "New England Patriots", "New Orleans Saints", "New York Giants",
     "New York Jets", "Philadelphia Eagles", "Pittsburgh Steelers", "San Francisco 49ers",
     "Seattle Seahawks", "Tampa Bay Buccaneers", "Tennessee Titans", "Washington Commanders"
+  ],
+  "mlbTeams": [
+    "Arizona Diamondbacks", "Atlanta Braves", "Baltimore Orioles", "Boston Red Sox",
+    "Chicago White Sox", "Chicago Cubs", "Cincinnati Reds", "Cleveland Guardians",
+    "Colorado Rockies", "Detroit Tigers", "Houston Astros", "Kansas City Royals",
+    "Los Angeles Angels", "Los Angeles Dodgers", "Miami Marlins", "Milwaukee Brewers",
+    "Minnesota Twins", "New York Yankees", "New York Mets", "Athletics",
+    "Philadelphia Phillies", "Pittsburgh Pirates", "San Diego Padres", "San Francisco Giants",
+    "Seattle Mariners", "St. Louis Cardinals", "Tampa Bay Rays", "Texas Rangers",
+    "Toronto Blue Jays", "Washington Nationals"
+  ],
+  "sports": [
+    { "code": "nfl", "label": "NFL", "teamsKey": "nflTeams", "teamsPerBreak": 32 },
+    { "code": "mlb", "label": "MLB", "teamsKey": "mlbTeams", "teamsPerBreak": 30 }
   ],
   "teamsPerBreak": 32,
   "defaultBreaksPerEvent": 9,

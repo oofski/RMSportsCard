@@ -108,10 +108,11 @@ export default function BreakList({ breaks, loading, error, onOpenBreak }) {
                 </span>
               </div>
 
-              {/* ---- Fidelity line: teams captured vs the full 32-team slate ----
-                  A break is a slot for all 32 NFL teams. We surface how many we
-                  parsed so a fidelity gap (teams lost in the upload) is visible,
-                  and alarm on any one-team-per-break collision. */}
+              {/* ---- Fidelity line: teams captured vs the full slate ----------
+                  A break is a slot for the sport's whole slate (32 NFL / 30 MLB;
+                  maxTeams carries the right count). We surface how many we parsed
+                  so a fidelity gap (teams lost in the upload) is visible, and
+                  alarm on any one-team-per-break collision. */}
               {brk.missingCount != null && (
                 <div className="row" style={{ gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
                   {brk.hasAll32 ? (
