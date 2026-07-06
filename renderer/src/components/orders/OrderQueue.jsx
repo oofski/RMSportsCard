@@ -295,6 +295,11 @@ export default function OrderQueue({ currentUser }) {
                     {o.cardCount} cards
                   </span>
                 )}
+                {o.topSleevedCount > 0 && (
+                  <span className="badge sleeve" title={`${o.topSleevedCount} card(s) in this order are top-sleeved — grab a toploader`}>
+                    🛡 {o.topSleevedCount}
+                  </span>
+                )}
                 {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>Held</span>}
               </div>
 
@@ -325,21 +330,25 @@ export default function OrderQueue({ currentUser }) {
                 {o.breaks.map((b) => {
                   const done = b.teams.filter((t) => t.checkedOff).length
                   const complete = b.teams.length > 0 && done >= b.teams.length
+                  const sleeved = b.teams.filter((t) => t.topSleeved).length
                   return (
                     <div key={b.breakNumber} className="break-group">
                       <div className="bk">
-                        <span>Break #{b.breakNumber}</span>
+                        <span className="row" style={{ gap: 8, alignItems: 'center' }}>
+                          Break #{b.breakNumber}
+                          {sleeved > 0 && <span className="badge sleeve small" title={`${sleeved} top-sleeved in this break`}>🛡 {sleeved}</span>}
+                        </span>
                         <span className="mono small" style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
                       </div>
                       <div className="row" style={{ flexWrap: 'wrap' }}>
                         {b.teams.map((t) => (
                           <span
                             key={t.slotId}
-                            className={`team-chip ${t.checkedOff ? 'checked' : ''}`}
+                            className={`team-chip ${t.checkedOff ? 'checked' : ''} ${t.topSleeved ? 'sleeve' : ''}`}
                             onClick={() => toggleTeam(o, t)}
-                            title={t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}
+                            title={`${t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}${t.topSleeved ? ' · Top-sleeved (needs a toploader)' : ''}`}
                           >
-                            {t.checkedOff ? '✓' : '☐'} {t.teamName}
+                            {t.checkedOff ? '✓' : '☐'} {t.topSleeved ? '🛡 ' : ''}{t.teamName}
                           </span>
                         ))}
                       </div>

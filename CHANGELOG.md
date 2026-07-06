@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.15] - 2026-07-06
+
+### Added — Top-sleeve tags now show in the Orders queue
+The 🛡 top-sleeve tags (from a sleeve template or manual tagging) now carry
+through to the **Orders** view, not just the Checker:
+- Each order card shows a **🛡 count badge** so the planner sees at a glance how
+  many cards in that package need a toploader.
+- In the expanded per-break team list, every top-sleeved team chip is marked
+  with a 🛡 and a blue accent, and each break header shows its top-sleeved count.
+
 ## [1.5.14] - 2026-07-06
 
 ### Added — Sleeve Templates (top-sleeve tagging)

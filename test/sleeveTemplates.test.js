@@ -209,3 +209,40 @@ describe('delete', () => {
     expect((await api('/api/sleeve-templates/tmpl_nope', { method: 'DELETE' })).status).toBe(404)
   })
 })
+
+describe('order queue reflects top-sleeve tags', () => {
+  it('carries topSleeved per team + a per-order count on the order rows', () => {
+    const { Db } = require('../server/db.cjs')
+    const { Store } = require('../server/store.cjs')
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rmcardz-tmpl-ord-'))
+    const d = new Db(new Store(dir, 'o.json'))
+    // A one-customer package with two Break #1 cards + a shipment (so it appears
+    // in the Orders queue).
+    d.importDataset({
+      event: { name: 'E', date: '2026-01-01' },
+      sport: 'nfl',
+      breaks: [{ id: 'b1', breakNumber: 1, eventName: 'E', eventDate: '2026-01-01', status: 'pending' }],
+      teamSlots: [
+        { id: 's1', breakId: 'b1', breakNumber: 1, teamName: 'Dallas Cowboys', customerId: 'c1', orderId: 'o1', price: 10, isGiveaway: false, checkedOff: false },
+        { id: 's2', breakId: 'b1', breakNumber: 1, teamName: 'Chicago Bears', customerId: 'c1', orderId: 'o2', price: 10, isGiveaway: false, checkedOff: false },
+      ],
+      customers: [{ id: 'c1', whatnotHandle: 'c1', realName: 'Cust', address: '', isNew: false }],
+      shipments: [{ id: 'sh1', customerId: 'c1', trackingNumber: 'T1', serviceType: 'Priority', manualStatus: { code: 'not_shipped' } }],
+      orders: [
+        { id: 'o1', customerId: 'c1', breakId: 'b1', breakNumber: 1, teamName: 'Dallas Cowboys', price: 10 },
+        { id: 'o2', customerId: 'c1', breakId: 'b1', breakNumber: 1, teamName: 'Chicago Bears', price: 10 },
+      ],
+      batchUrls: [],
+      warnings: [],
+    }, { filename: 'x.pdf' })
+
+    const tmpl = d.createSleeveTemplate({ name: 'T', sport: 'nfl', breaks: { 1: ['Dallas Cowboys'] } })
+    d.applySleeveTemplate(tmpl.id)
+
+    const [row] = d.listOrders()
+    expect(row.topSleevedCount).toBe(1)
+    const b1 = row.breaks.find((b) => b.breakNumber === 1)
+    expect(b1.teams.find((t) => t.teamName === 'Dallas Cowboys').topSleeved).toBe(true)
+    expect(b1.teams.find((t) => t.teamName === 'Chicago Bears').topSleeved).toBe(false)
+  })
+})

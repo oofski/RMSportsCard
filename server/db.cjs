@@ -633,7 +633,7 @@ class Db {
     const byBreak = new Map()
     slots.forEach((t) => {
       if (!byBreak.has(t.breakNumber)) byBreak.set(t.breakNumber, [])
-      byBreak.get(t.breakNumber).push({ slotId: t.id, teamName: t.teamName, checkedOff: !!t.checkedOff, orderId: t.orderId })
+      byBreak.get(t.breakNumber).push({ slotId: t.id, teamName: t.teamName, checkedOff: !!t.checkedOff, topSleeved: !!t.topSleeved, orderId: t.orderId })
     })
     const breaks = [...byBreak.entries()]
       .sort((a, b) => a[0] - b[0])
@@ -663,6 +663,9 @@ class Db {
       // cardCount is the total team slots; multiCard drives the warning badge.
       cardCount: slots.length,
       multiCard: slots.length > 1,
+      // How many of this package's cards are tagged top-sleeved (from an applied
+      // sleeve template / manual tagging) so the planner grabs a toploader.
+      topSleevedCount: slots.filter((t) => t.topSleeved).length,
       pick: { checked, total: slots.length },
     }
   }
