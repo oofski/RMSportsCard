@@ -25,6 +25,7 @@ const ledgerRoutes = require('./routes/ledger.routes.cjs')
 const historyRoutes = require('./routes/history.routes.cjs')
 const shipmentRoutes = require('./routes/shipments.routes.cjs')
 const dashboardRoutes = require('./routes/dashboard.routes.cjs')
+const templateRoutes = require('./routes/templates.routes.cjs')
 
 /**
  * Build the Express app and its backing data services.
@@ -74,6 +75,7 @@ function createApp({ dataDir }) {
   app.use('/api', historyRoutes(ctx))
   app.use('/api', shipmentRoutes(ctx))
   app.use('/api', dashboardRoutes(ctx))
+  app.use('/api', templateRoutes(ctx))
 
   // --- Central error handler ------------------------------------------------
   app.use((err, _req, res, _next) => {

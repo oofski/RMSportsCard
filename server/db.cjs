@@ -24,6 +24,7 @@ const crypto = require('node:crypto')
 const reference = require('../shared/reference.json')
 const { ordersCsv, shippingCsv } = require('./csv.cjs')
 const { parseLedgerRows, analyzeLedger } = require('./ledger.cjs')
+const { listTeams, normalizeSport } = require('./parser/teams.cjs')
 
 const VALID_SHIPMENT_CODES = reference.shipmentStatuses.map((s) => s.code)
 const EXCEPTION_CODES = reference.shipmentStatuses.filter((s) => s.isException).map((s) => s.code)
@@ -59,6 +60,16 @@ class Db {
     s.warnings = dataset.warnings || []
     s.breakAudit = dataset.breakAudit || []
     if (filename) s.meta.lastImportFilename = filename
+    // A fresh import starts untagged; a default template (if one matches this
+    // sport) re-applies its top-sleeve marks automatically.
+    s.meta.appliedSleeveTemplateId = null
+    s.meta.appliedSleeveTemplateName = null
+    const def = s.meta.defaultSleeveTemplateId
+      ? s.sleeveTemplates.find((t) => t.id === s.meta.defaultSleeveTemplateId)
+      : null
+    if (def && def.sport === (s.meta.sport || 'nfl')) {
+      this._applyTemplateToSlots(def)
+    }
     this.store.saveNow()
     return this.summary()
   }
@@ -81,6 +92,12 @@ class Db {
       // and how many one-team-per-break collisions were detected on import.
       breaksMissingTeams: (s.breakAudit || []).filter((b) => !b.hasAll32).length,
       breakCollisions: (s.breakAudit || []).reduce((sum, b) => sum + ((b.collisions && b.collisions.length) || 0), 0),
+      // Top-sleeve tagging at a glance: how many slots are tagged and which
+      // template (if any) is currently applied.
+      topSleevedSlots: s.teamSlots.filter((t) => t.topSleeved).length,
+      appliedTemplate: s.meta.appliedSleeveTemplateId
+        ? { id: s.meta.appliedSleeveTemplateId, name: s.meta.appliedSleeveTemplateName }
+        : null,
     }
   }
 
@@ -98,6 +115,7 @@ class Db {
       .map((b) => {
         const slots = s.teamSlots.filter((t) => t.breakId === b.id)
         const checked = slots.filter((t) => t.checkedOff).length
+        const topSleeved = slots.filter((t) => t.topSleeved).length
         const audit = auditByNumber.get(b.breakNumber) || null
         return {
           id: b.id,
@@ -106,6 +124,7 @@ class Db {
           eventDate: b.eventDate,
           totalTeams: slots.length, // actual SOLD slots, not the 32 max (spec §13)
           checkedTeams: checked,
+          topSleevedTeams: topSleeved, // how many slots this template tagged
           status: b.status,
           // Fidelity: how complete this break is vs the full 32-team NFL slate,
           // which teams are missing, and any one-team-per-break collisions. Null
@@ -134,6 +153,7 @@ class Db {
           checkedOff: !!t.checkedOff,
           checkedOffAt: t.checkedOffAt || null,
           checkedOffBy: t.checkedOffBy || null,
+          topSleeved: !!t.topSleeved,
           orderId: t.orderId,
           price: t.price,
           isGiveaway: !!t.isGiveaway,
@@ -211,6 +231,173 @@ class Db {
     if (checked === 0) b.status = 'pending'
     else if (slots.length > 0 && checked >= slots.length) b.status = b.status === 'packed' ? 'packed' : 'picking'
     else b.status = 'picking'
+  }
+
+  // ---------------------------------------------------------------------------
+  // Sleeve templates (top-sleeve tagging)
+  // ---------------------------------------------------------------------------
+  // A template records, per break NUMBER, which teams get a toploader/sleeve.
+  // Applying it stamps teamSlot.topSleeved so the pick screen shows which cards
+  // need extra protection. Templates are sport-scoped (the team list differs by
+  // league) and reusable across events; they survive PDF re-imports.
+
+  /** Keep only valid break numbers + known teams for the sport; de-dupe. */
+  _sanitizeTemplateBreaks(breaks, sport) {
+    const valid = new Set(listTeams(sport))
+    const out = {}
+    if (breaks && typeof breaks === 'object') {
+      for (const [k, teams] of Object.entries(breaks)) {
+        const n = parseInt(k, 10)
+        if (!Number.isInteger(n) || n < 1) continue
+        if (!Array.isArray(teams)) continue
+        const seen = new Set()
+        const kept = []
+        for (const t of teams) {
+          if (valid.has(t) && !seen.has(t)) { seen.add(t); kept.push(t) }
+        }
+        if (kept.length) out[n] = kept
+      }
+    }
+    return out
+  }
+
+  /** Public-shape metadata for one template (no per-break detail). */
+  _templateMeta(t) {
+    const s = this.store.state
+    const teamCount = Object.values(t.breaks || {}).reduce((sum, arr) => sum + arr.length, 0)
+    return {
+      id: t.id,
+      name: t.name,
+      sport: t.sport,
+      breakCount: Object.keys(t.breaks || {}).length,
+      teamCount,
+      isDefault: s.meta.defaultSleeveTemplateId === t.id,
+      isApplied: s.meta.appliedSleeveTemplateId === t.id,
+      createdAt: t.createdAt,
+      updatedAt: t.updatedAt,
+    }
+  }
+
+  listSleeveTemplates() {
+    return this.store.state.sleeveTemplates.map((t) => this._templateMeta(t))
+  }
+
+  getSleeveTemplate(id) {
+    const t = this.store.state.sleeveTemplates.find((x) => x.id === id)
+    if (!t) return null
+    return { ...this._templateMeta(t), breaks: t.breaks || {} }
+  }
+
+  createSleeveTemplate({ name, sport, breaks } = {}) {
+    const s = this.store.state
+    const code = normalizeSport(sport)
+    const t = {
+      id: `tmpl_${crypto.randomBytes(6).toString('hex')}`,
+      name: (name && String(name).trim()) || 'Untitled template',
+      sport: code,
+      breaks: this._sanitizeTemplateBreaks(breaks, code),
+      createdAt: now(),
+      updatedAt: now(),
+    }
+    s.sleeveTemplates.push(t)
+    this.store.saveNow()
+    return this.getSleeveTemplate(t.id)
+  }
+
+  updateSleeveTemplate(id, { name, breaks, isDefault } = {}) {
+    const s = this.store.state
+    const t = s.sleeveTemplates.find((x) => x.id === id)
+    if (!t) return null
+    if (name !== undefined) t.name = String(name).trim() || t.name
+    // Re-sanitize against the template's OWN sport (sport itself is immutable
+    // once created — the team list it was built from can't change under it).
+    if (breaks !== undefined) t.breaks = this._sanitizeTemplateBreaks(breaks, t.sport)
+    if (isDefault !== undefined) {
+      if (isDefault) s.meta.defaultSleeveTemplateId = t.id
+      else if (s.meta.defaultSleeveTemplateId === t.id) s.meta.defaultSleeveTemplateId = null
+    }
+    t.updatedAt = now()
+    this.store.saveNow()
+    return this.getSleeveTemplate(id)
+  }
+
+  setDefaultSleeveTemplate(id) {
+    const s = this.store.state
+    if (id && !s.sleeveTemplates.find((x) => x.id === id)) return null
+    s.meta.defaultSleeveTemplateId = id || null
+    this.store.saveNow()
+    return this.listSleeveTemplates()
+  }
+
+  deleteSleeveTemplate(id) {
+    const s = this.store.state
+    const idx = s.sleeveTemplates.findIndex((x) => x.id === id)
+    if (idx === -1) return { ok: false }
+    s.sleeveTemplates.splice(idx, 1)
+    if (s.meta.defaultSleeveTemplateId === id) s.meta.defaultSleeveTemplateId = null
+    if (s.meta.appliedSleeveTemplateId === id) {
+      s.meta.appliedSleeveTemplateId = null
+      s.meta.appliedSleeveTemplateName = null
+    }
+    this.store.saveNow()
+    return { ok: true }
+  }
+
+  /** Core: stamp topSleeved on every slot per the template (full overwrite). */
+  _applyTemplateToSlots(t) {
+    const s = this.store.state
+    let tagged = 0
+    const affected = new Set()
+    for (const slot of s.teamSlots) {
+      // JSON object keys are strings; slot.breakNumber is a number — property
+      // access coerces, but we check both forms to be safe.
+      const teams = t.breaks[slot.breakNumber] || t.breaks[String(slot.breakNumber)] || []
+      const on = teams.includes(slot.teamName)
+      slot.topSleeved = on
+      if (on) { tagged += 1; affected.add(slot.breakNumber) }
+    }
+    s.meta.appliedSleeveTemplateId = t.id
+    s.meta.appliedSleeveTemplateName = t.name
+    return { tagged, breaksAffected: affected.size }
+  }
+
+  /** Apply a saved template to the current event's slots. */
+  applySleeveTemplate(id) {
+    const s = this.store.state
+    const t = s.sleeveTemplates.find((x) => x.id === id)
+    if (!t) return null
+    const res = this._applyTemplateToSlots(t)
+    this.store.saveNow()
+    return {
+      templateId: t.id,
+      templateName: t.name,
+      templateSport: t.sport,
+      eventSport: s.meta.sport || 'nfl',
+      // A template built for the other league won't match any team names — flag
+      // it so the UI can explain a "0 tagged" result instead of looking broken.
+      sportMismatch: t.sport !== (s.meta.sport || 'nfl'),
+      totalSlots: s.teamSlots.length,
+      ...res,
+    }
+  }
+
+  /** Clear every top-sleeve tag and forget which template was applied. */
+  clearSleeveTags() {
+    const s = this.store.state
+    s.teamSlots.forEach((t) => { t.topSleeved = false })
+    s.meta.appliedSleeveTemplateId = null
+    s.meta.appliedSleeveTemplateName = null
+    this.store.saveNow()
+    return { ok: true }
+  }
+
+  /** Manual per-slot top-sleeve toggle from the pick screen. */
+  setTeamSlotTopSleeved(slotId, value) {
+    const slot = this.store.state.teamSlots.find((t) => t.id === slotId)
+    if (!slot) return null
+    slot.topSleeved = !!value
+    this.store.save()
+    return { id: slot.id, topSleeved: slot.topSleeved }
   }
 
   // ---------------------------------------------------------------------------

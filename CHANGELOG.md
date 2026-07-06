@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.14] - 2026-07-06
+
+### Added — Sleeve Templates (top-sleeve tagging)
+A reusable way to mark which teams get a toploader/sleeve, so during sorting you
+can see at a glance which cards need extra protection.
+- New **Sleeve Templates** tab. Pick a sport (NFL/MLB), then go break by break
+  and tap the teams that get top-sleeved — each gets a checkmark. Name it and
+  save. Shortcuts included: **All / None** per break and **Copy to all breaks**.
+- **Apply** a saved template to the current event in one click — every matching
+  team slot (per break) is tagged. The apply result tells you how many slots were
+  tagged, and warns if the template's league doesn't match the event.
+- Mark one template as **Default** and it auto-applies on every future PDF import
+  (only when its sport matches the imported event).
+- The **Checker** now shows top-sleeve tags: a 🛡 badge on each tagged team, a
+  per-break count, and a one-tap 🛡 toggle on any pick row to add/remove a tag by
+  hand. The break list shows a top-sleeved count per break.
+- Templates persist across PDF re-imports (like your users and history).
+
 ## [1.5.13] - 2026-07-06
 
 ### Fixed — Auto-update now finds new releases on its own

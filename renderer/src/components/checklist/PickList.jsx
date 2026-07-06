@@ -23,6 +23,7 @@ export default function PickList({
   slots,            // array of slots with the parent's optimistic `checkedOff`
   onBack,           // () => return to the selection list
   onToggleSlot,     // (slotId, nextChecked) => optimistic toggle + persist
+  onToggleSleeve,   // (slotId, nextSleeved) => toggle the top-sleeve tag
   onMarkAllPacked,  // () => check every currently-unchecked slot
   onClearAll,       // () => clearBreak then reload
   onConfirmPacked,  // () => packBreak(id) then refresh (completion prompt)
@@ -38,6 +39,7 @@ export default function PickList({
   const checkedCount = slots.filter((s) => s.checkedOff).length
   const pct = total > 0 ? Math.round((checkedCount / total) * 100) : 0
   const allChecked = total > 0 && checkedCount === total
+  const sleevedCount = slots.filter((s) => s.topSleeved).length
 
   // Filter by team name, then stable-sort unchecked-first so checked rows sink.
   // We re-sort here (not only on the server) because optimistic toggles change
@@ -88,6 +90,13 @@ export default function PickList({
         </div>
         <span className="mono small nowrap" style={{ minWidth: 44, textAlign: 'right' }}>{pct}%</span>
       </div>
+
+      {/* Top-sleeve summary for this break (from an applied template / manual tags). */}
+      {sleevedCount > 0 && (
+        <div className="row" style={{ marginBottom: 2 }}>
+          <span className="badge sleeve">🛡 {sleevedCount} top-sleeved</span>
+        </div>
+      )}
 
       {/* ---- Completion prompt (§6.4) ------------------------------------- */}
       {allChecked && !promptDismissed && brk.status !== 'packed' && brk.status !== 'shipped' && (
@@ -165,7 +174,7 @@ export default function PickList({
           return (
             <div
               key={slot.id}
-              className={`pick-row ${slot.checkedOff ? 'checked' : ''}`}
+              className={`pick-row ${slot.checkedOff ? 'checked' : ''} ${slot.topSleeved ? 'sleeve' : ''}`}
               onClick={() => onToggleSlot(slot.id, !slot.checkedOff)}
               role="checkbox"
               aria-checked={slot.checkedOff}
@@ -182,6 +191,9 @@ export default function PickList({
               <span className="check">{slot.checkedOff ? '✓' : ''}</span>
               <span className="team">
                 {slot.teamName}
+                {slot.topSleeved && (
+                  <span className="badge sleeve small" style={{ marginLeft: 8 }}>🛡 Top sleeve</span>
+                )}
                 {slot.isGiveaway && (
                   <span className="badge amber small" style={{ marginLeft: 8 }}>Giveaway</span>
                 )}
@@ -197,6 +209,19 @@ export default function PickList({
                   </span>
                 )}
               </span>
+              {/* Top-sleeve toggle. stopPropagation so tapping it never also flips
+                  the pick checkbox on the row. */}
+              {onToggleSleeve && (
+                <button
+                  type="button"
+                  className={`sleeve-toggle ${slot.topSleeved ? 'on' : ''}`}
+                  title={slot.topSleeved ? 'Top-sleeved — tap to remove' : 'Mark as top-sleeved'}
+                  aria-pressed={!!slot.topSleeved}
+                  onClick={(e) => { e.stopPropagation(); onToggleSleeve(slot.id, !slot.topSleeved) }}
+                >
+                  🛡
+                </button>
+              )}
             </div>
           )
         })}

@@ -24,6 +24,13 @@ module.exports = function breakRoutes({ db, requireAuth }) {
   })
 
   router.patch('/teamslot/:id', requireAuth, (req, res) => {
+    // The same endpoint handles the pick checkbox and the top-sleeve tag so the
+    // renderer has one PATCH for a slot. `topSleeved` takes precedence when sent.
+    if (req.body.topSleeved !== undefined) {
+      const tagged = db.setTeamSlotTopSleeved(req.params.id, !!req.body.topSleeved)
+      if (!tagged) return res.status(404).json({ error: 'Team slot not found' })
+      return res.json(tagged)
+    }
     const updated = db.setTeamSlotChecked(req.params.id, !!req.body.checkedOff, req.user)
     if (!updated) return res.status(404).json({ error: 'Team slot not found' })
     res.json(updated)

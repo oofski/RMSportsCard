@@ -21,6 +21,7 @@ import UpdateBanner from './components/UpdateBanner.jsx'
 import Upload from './components/Upload.jsx'
 import OrderQueue from './components/orders/OrderQueue.jsx'
 import BreakChecklist from './components/checklist/BreakChecklist.jsx'
+import SleeveTemplates from './components/templates/SleeveTemplates.jsx'
 import ShippingTracker from './components/shipping/ShippingTracker.jsx'
 import SalesDashboard from './components/whatnot/SalesDashboard.jsx'
 import History from './components/history/History.jsx'
@@ -183,6 +184,7 @@ export default function App() {
           <div className="container">
             {tab === 'orders' && <OrderQueue currentUser={user} />}
             {tab === 'checker' && <BreakChecklist currentUser={user} />}
+            {tab === 'templates' && <SleeveTemplates />}
             {tab === 'shipping' && <ShippingTracker currentUser={user} />}
             {tab === 'sales' && <SalesDashboard currentUser={user} />}
             {tab === 'history' && <History currentUser={user} />}

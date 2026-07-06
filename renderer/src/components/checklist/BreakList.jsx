@@ -108,6 +108,13 @@ export default function BreakList({ breaks, loading, error, onOpenBreak }) {
                 </span>
               </div>
 
+              {/* Top-sleeve tags from an applied template (or manual tagging). */}
+              {brk.topSleevedTeams > 0 && (
+                <div className="row" style={{ marginTop: 8 }}>
+                  <span className="badge sleeve small">🛡 {brk.topSleevedTeams} top-sleeved</span>
+                </div>
+              )}
+
               {/* ---- Fidelity line: teams captured vs the full slate ----------
                   A break is a slot for the sport's whole slate (32 NFL / 30 MLB;
                   maxTeams carries the right count). We surface how many we parsed

@@ -14,7 +14,7 @@ import React from 'react'
 import Logo from './Logo.jsx'
 import {
   IconBox, IconCheckSquare, IconTruck, IconBarChart, IconClock,
-  IconSettings, IconLogOut, IconSun, IconMoon, IconUsers, IconUpload,
+  IconSettings, IconLogOut, IconSun, IconMoon, IconUsers, IconUpload, IconShield,
 } from './Icons.jsx'
 
 // Nav model — split icon/label so the collapsed rail can render icons only.
@@ -22,6 +22,7 @@ import {
 const NAV = [
   { key: 'orders', icon: <IconBox />, label: 'Orders' },
   { key: 'checker', icon: <IconCheckSquare />, label: 'Checker' },
+  { key: 'templates', icon: <IconShield />, label: 'Sleeve Templates' },
   { key: 'shipping', icon: <IconTruck />, label: 'Shipping Tracker' },
   { key: 'sales', icon: <IconBarChart />, label: 'Sales Dashboard' },
   { key: 'history', icon: <IconClock />, label: 'History' },

@@ -141,6 +141,9 @@ table.grid tr.clickable:focus-visible {
 .badge.red { background: color-mix(in srgb, var(--bad) 15%, var(--bg-2)); color: var(--bad); border-color: color-mix(in srgb, var(--bad) 35%, transparent); }
 .badge.green { background: color-mix(in srgb, var(--good) 15%, var(--bg-2)); color: var(--good); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
 .badge.amber { background: color-mix(in srgb, var(--warn) 15%, var(--bg-2)); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 35%, transparent); }
+/* Top-sleeve tag (a card that gets a toploader/sleeve). Brand-blue accent so it
+   reads distinctly from the green "picked" / amber "warning" states. */
+.badge.sleeve { background: color-mix(in srgb, var(--accent) 16%, var(--bg-2)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 /* ---- Pick list rows (Module A — tablet) -------------------------------- */
 .pick-row {
@@ -155,6 +158,11 @@ table.grid tr.clickable:focus-visible {
 .pick-row.checked .check { background: var(--good); border-color: var(--good); color: #04210f; }
 .pick-row .team { font-weight: 600; font-size: 16px; flex: 1; }
 .pick-row .who { color: var(--text-dim); font-size: 13px; }
+/* A top-sleeved slot gets a left accent bar so it's spottable while picking. */
+.pick-row.sleeve { box-shadow: inset 3px 0 0 var(--accent); }
+/* Small tappable top-sleeve toggle on a pick row (stops row-toggle propagation). */
+.sleeve-toggle { flex: 0 0 auto; padding: 4px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); color: var(--text-dim); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sleeve-toggle.on { background: color-mix(in srgb, var(--accent) 16%, var(--bg-2)); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
 
 /* ---- Tables (Module B — desktop) --------------------------------------- */
 table.grid { width: 100%; border-collapse: collapse; }

@@ -21,6 +21,12 @@ export const SPORT_OPTIONS = [
 export const sportLabel = (code) =>
   (reference.sports.find((s) => s.code === code) || { label: code ? String(code).toUpperCase() : '' }).label
 
+/** The canonical team list for a sport code (defaults to NFL on unknown). */
+export const teamsForSport = (code) => {
+  const s = reference.sports.find((x) => x.code === code)
+  return (s && reference[s.teamsKey]) || reference.nflTeams
+}
+
 /** Map a shipment status code -> its display descriptor. */
 export const statusByCode = Object.fromEntries(SHIPMENT_STATUSES.map((s) => [s.code, s]))
 

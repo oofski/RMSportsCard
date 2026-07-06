@@ -66,6 +66,21 @@ export const parseStatus = (jobId) => request(`/api/parse/status/${jobId}`)
 export const summary = () => request('/api/summary')
 export const loadDemo = () => request('/api/parse/demo', { method: 'POST' })
 
+// ---- Sleeve templates (top-sleeve tagging) --------------------------------
+// A template marks, per break number, which teams get a toploader/sleeve.
+// Applying it tags the current event's team slots (topSleeved) so the pick
+// screen shows which cards need extra protection.
+export const listSleeveTemplates = () => request('/api/sleeve-templates')
+export const getSleeveTemplate = (id) => request(`/api/sleeve-templates/${id}`)
+export const createSleeveTemplate = (payload) => request('/api/sleeve-templates', { method: 'POST', body: payload })
+export const updateSleeveTemplate = (id, payload) => request(`/api/sleeve-templates/${id}`, { method: 'PATCH', body: payload })
+export const deleteSleeveTemplate = (id) => request(`/api/sleeve-templates/${id}`, { method: 'DELETE' })
+export const applySleeveTemplate = (id) => request(`/api/sleeve-templates/${id}/apply`, { method: 'POST' })
+export const setDefaultSleeveTemplate = (id, on = true) => request(`/api/sleeve-templates/${id}/default`, { method: 'POST', body: { on } })
+export const clearSleeveTags = () => request('/api/sleeve-tags/clear', { method: 'POST' })
+// Toggle one slot's top-sleeve tag (reuses the team-slot PATCH endpoint).
+export const toggleTeamSlotSleeve = (id, topSleeved) => request(`/api/teamslot/${id}`, { method: 'PATCH', body: { topSleeved } })
+
 // ---- Breaks (Module A) ----------------------------------------------------
 export const getBreaks = () => request('/api/breaks')
 export const getBreak = (id) => request(`/api/breaks/${id}`)

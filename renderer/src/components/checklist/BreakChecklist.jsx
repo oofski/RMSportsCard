@@ -210,6 +210,20 @@ export default function BreakChecklist({ currentUser }) {
   }, [currentUser, flushSlot])
 
   // -------------------------------------------------------------------------
+  // Top-sleeve tag toggle (independent of the pick checkbox). Not part of the
+  // offline pick buffer — it's a low-frequency tagging action — so we just do an
+  // optimistic flip and revert if the server rejects it.
+  // -------------------------------------------------------------------------
+  const toggleSleeve = useCallback(async (slotId, next) => {
+    setSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, topSleeved: next } : s)))
+    try {
+      await api.toggleTeamSlotSleeve(slotId, next)
+    } catch {
+      setSlots((prev) => prev.map((s) => (s.id === slotId ? { ...s, topSleeved: !next } : s)))
+    }
+  }, [])
+
+  // -------------------------------------------------------------------------
   // Retry loop (§6.5): every RETRY_MS, attempt to flush every queued slot.
   // Runs only while a break is open (where toggles originate). When the queue
   // empties, flash "Synced" then settle back to idle.
@@ -350,6 +364,7 @@ export default function BreakChecklist({ currentUser }) {
         slots={slots}
         onBack={backToBreaks}
         onToggleSlot={toggleSlot}
+        onToggleSleeve={toggleSleeve}
         onMarkAllPacked={markAllPacked}
         onClearAll={clearAll}
         onConfirmPacked={confirmPacked}
