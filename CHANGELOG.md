@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.17] - 2026-07-07
+
+### Improved — Top-sleeved cards are now clearly highlighted in Orders
+- A top-sleeved team in an order's team list is now a **filled blue chip** (with
+  the 🛡), not just a thin accent bar — impossible to miss while packing.
+- The whole order row gets a stronger accent wash **plus a blue left bar** when it
+  contains top-sleeved cards, so it stands out at a glance in the list. Packed
+  (green) cards still read as packed.
+
 ## [1.5.16] - 2026-07-07
 
 ### Changed — Top-sleeve is now a fast per-break action (templates removed)

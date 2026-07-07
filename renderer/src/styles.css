@@ -216,9 +216,12 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 /* Checked = positive solid green (success), not a strike-through (deletion). */
 .team-chip.checked { background: var(--good); border-color: var(--good); color: #04210f; font-weight: 600; text-decoration: none; }
 .team-chip.checked:hover { background: color-mix(in srgb, #000000 10%, var(--good)); }
-/* A top-sleeved team chip gets a brand-blue left accent (works whether or not
-   it's also checked green). */
-.team-chip.sleeve { box-shadow: inset 3px 0 0 var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+/* A top-sleeved team chip is HIGHLIGHTED so it can't be missed: a brand-blue
+   left accent + border on any sleeved chip, plus a filled blue wash + blue text
+   when it isn't already packed (:not(.checked) so a packed green chip wins). */
+.team-chip.sleeve { box-shadow: inset 3px 0 0 var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.team-chip.sleeve:not(.checked) { background: color-mix(in srgb, var(--accent) 18%, var(--bg-2)); color: var(--accent); font-weight: 600; }
+.team-chip.sleeve:not(.checked):hover { background: color-mix(in srgb, var(--accent) 26%, var(--bg-2)); }
 /* Giveaway team chip — amber tint so a promo card in a paid package stands out.
    Guarded with :not(.checked) so a packed (green) chip still wins. */
 .team-chip.giveaway:not(.checked) { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); background: color-mix(in srgb, var(--warn) 10%, var(--bg-2)); }
@@ -271,11 +274,12 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .order-row.held { opacity: 0.62; }
 .order-row.flagged { box-shadow: inset 4px 0 0 var(--bad); }
 .order-row.open { border-color: var(--accent); }
-/* Whole-row accent wash so packages with top-sleeved cards are scannable in the
-   list (uses background, not box-shadow, so it never collides with the flagged
-   inset bar or the held opacity). */
-.order-row.has-sleeve { background: color-mix(in srgb, var(--accent) 7%, var(--bg-2)); }
-.order-row.has-sleeve .order-row-main:hover { background: color-mix(in srgb, var(--accent) 12%, var(--bg-3)); }
+/* Whole-row highlight so packages with top-sleeved cards jump out of the list:
+   an accent wash plus a brand-blue left bar. The bar is suppressed when the row
+   is also flagged (that state owns the left bar with its red --bad inset). */
+.order-row.has-sleeve { background: color-mix(in srgb, var(--accent) 10%, var(--bg-2)); }
+.order-row.has-sleeve:not(.flagged) { box-shadow: inset 4px 0 0 var(--accent); }
+.order-row.has-sleeve .order-row-main:hover { background: color-mix(in srgb, var(--accent) 16%, var(--bg-3)); }
 .order-row-main {
   display: grid;
   grid-template-columns: max-content minmax(180px, 1fr) max-content max-content;
