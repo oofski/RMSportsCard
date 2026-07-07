@@ -223,6 +223,27 @@ export default function BreakChecklist({ currentUser }) {
     }
   }, [])
 
+  // Bulk "Top-sleeve all / Clear sleeves" for the whole break. Optimistic, then
+  // reconcile against the server detail — replaying any still-pending offline
+  // pick toggles so a queued checkbox tap survives (same as openBreak).
+  const setAllSleeves = useCallback(async (on) => {
+    if (selectedBreakId == null) return
+    const prev = slotsRef.current
+    setBusyBulk(true)
+    setSlots((cur) => cur.map((s) => ({ ...s, topSleeved: on })))
+    try {
+      const detail = await api.setBreakTopSleeved(selectedBreakId, on)
+      const pending = readPending()
+      setActiveBreak(detail)
+      setSlots((detail.teamSlots || []).map((slot) =>
+        slot.id in pending ? { ...slot, checkedOff: pending[slot.id] } : slot))
+    } catch {
+      setSlots(prev) // revert on failure
+    } finally {
+      setBusyBulk(false)
+    }
+  }, [selectedBreakId])
+
   // -------------------------------------------------------------------------
   // Retry loop (§6.5): every RETRY_MS, attempt to flush every queued slot.
   // Runs only while a break is open (where toggles originate). When the queue
@@ -365,6 +386,8 @@ export default function BreakChecklist({ currentUser }) {
         onBack={backToBreaks}
         onToggleSlot={toggleSlot}
         onToggleSleeve={toggleSleeve}
+        onSleeveAll={() => setAllSleeves(true)}
+        onClearSleeves={() => setAllSleeves(false)}
         onMarkAllPacked={markAllPacked}
         onClearAll={clearAll}
         onConfirmPacked={confirmPacked}

@@ -27,7 +27,7 @@ module.exports = function parseRoutes({ db, requireAuth }) {
       const { parsePdf } = require('../parser/index.cjs')
 
       // Sport picker: multer surfaces non-file text fields on req.body. 'auto'
-      // (or absent) lets the parser auto-detect NFL vs MLB from the team names.
+      // (or absent) auto-detects the league (NFL / MLB / NBA) from the team names.
       const sport = (req.body && req.body.sport) || 'auto'
 
       const job = db.createParseJob({ filename: req.file.originalname, totalPages: 0 })

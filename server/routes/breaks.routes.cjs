@@ -6,6 +6,7 @@
 //   PATCH /api/teamslot/:id         -> toggle a checkbox  { checkedOff }
 //   POST  /api/breaks/:id/pack      -> mark break packed (completion flow)
 //   POST  /api/breaks/:id/clear     -> clear all checkboxes in a break
+//   POST  /api/breaks/:id/sleeve-all-> bulk set/clear top-sleeve for the break
 // =============================================================================
 
 const express = require('express')
@@ -44,6 +45,13 @@ module.exports = function breakRoutes({ db, requireAuth }) {
 
   router.post('/breaks/:id/clear', requireAuth, (req, res) => {
     const result = db.clearBreak(req.params.id)
+    if (!result) return res.status(404).json({ error: 'Break not found' })
+    res.json(result)
+  })
+
+  // Bulk top-sleeve for a whole break (Checker "Top-sleeve all" / "Clear sleeves").
+  router.post('/breaks/:id/sleeve-all', requireAuth, (req, res) => {
+    const result = db.setBreakTopSleeved(req.params.id, !!(req.body && req.body.topSleeved))
     if (!result) return res.status(404).json({ error: 'Break not found' })
     res.json(result)
   })

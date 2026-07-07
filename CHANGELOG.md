@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.16] - 2026-07-07
+
+### Changed — Top-sleeve is now a fast per-break action (templates removed)
+- Removed the separate **Sleeve Templates** tab. Top-sleeve tagging lives entirely
+  in the **Checker**, which is simpler.
+- The pick screen now has **🛡 Top-sleeve all** and **Clear sleeves** buttons, so
+  you can flag/clear a whole break's cards in one tap (alongside the existing
+  per-card 🛡 toggle). Works for every league.
+
+### Added — NBA support (30 teams)
+- Upload the same PDF for **NBA** breaks. Auto-detect now recognizes NBA, MLB, and
+  NFL from the team names (the three "Los Angeles" leagues stay correctly
+  separated), and the per-break fidelity audit counts against the 30-team NBA slate.
+
+### Improved — Orders make sleeved & giveaway cards obvious
+- Orders with top-sleeved cards get a **highlighted row** and a filled
+  **🛡 N toploaders** badge — unmistakable at a glance.
+- When a package has **multiple cards *and* a giveaway**, the order shows a clear
+  **🎁 Giveaway + N cards** flag (and the giveaway card is marked in the team list),
+  so a promo card riding inside a paid order never gets shortpacked.
+
 ## [1.5.15] - 2026-07-06
 
 ### Added — Top-sleeve tags now show in the Orders queue

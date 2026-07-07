@@ -108,7 +108,7 @@ export default function BreakList({ breaks, loading, error, onOpenBreak }) {
                 </span>
               </div>
 
-              {/* Top-sleeve tags from an applied template (or manual tagging). */}
+              {/* Top-sleeve tags on this break (manual / bulk tagging). */}
               {brk.topSleevedTeams > 0 && (
                 <div className="row" style={{ marginTop: 8 }}>
                   <span className="badge sleeve small">🛡 {brk.topSleevedTeams} top-sleeved</span>

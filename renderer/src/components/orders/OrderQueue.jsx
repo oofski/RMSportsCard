@@ -268,7 +268,7 @@ export default function OrderQueue({ currentUser }) {
         const isExpanded = expanded.has(o.id)
         const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
         return (
-          <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${isExpanded ? 'open' : ''}`}>
+          <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
             {/* Collapsed row — tap anywhere to drop down the team checklist. */}
             <div
               className="order-row-main"
@@ -295,9 +295,17 @@ export default function OrderQueue({ currentUser }) {
                     {o.cardCount} cards
                   </span>
                 )}
+                {o.multiCard && o.hasGiveaway && (
+                  <span
+                    className="badge giveaway-combo"
+                    title={`${o.cardCount} cards including ${o.giveawayCount} giveaway${o.giveawayCount > 1 ? 's' : ''} — verify the giveaway card ships with this package`}
+                  >
+                    🎁 Giveaway + {o.cardCount} cards
+                  </span>
+                )}
                 {o.topSleevedCount > 0 && (
-                  <span className="badge sleeve" title={`${o.topSleevedCount} card(s) in this order are top-sleeved — grab a toploader`}>
-                    🛡 {o.topSleevedCount}
+                  <span className="badge sleeve solid" title={`${o.topSleevedCount} card(s) need a toploader`}>
+                    🛡 {o.topSleevedCount} toploader{o.topSleevedCount > 1 ? 's' : ''}
                   </span>
                 )}
                 {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>Held</span>}
@@ -344,11 +352,11 @@ export default function OrderQueue({ currentUser }) {
                         {b.teams.map((t) => (
                           <span
                             key={t.slotId}
-                            className={`team-chip ${t.checkedOff ? 'checked' : ''} ${t.topSleeved ? 'sleeve' : ''}`}
+                            className={`team-chip ${t.checkedOff ? 'checked' : ''} ${t.topSleeved ? 'sleeve' : ''} ${t.isGiveaway ? 'giveaway' : ''}`}
                             onClick={() => toggleTeam(o, t)}
-                            title={`${t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}${t.topSleeved ? ' · Top-sleeved (needs a toploader)' : ''}`}
+                            title={`${t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}${t.topSleeved ? ' · Top-sleeved (needs a toploader)' : ''}${t.isGiveaway ? ' · Giveaway card' : ''}`}
                           >
-                            {t.checkedOff ? '✓' : '☐'} {t.topSleeved ? '🛡 ' : ''}{t.teamName}
+                            {t.checkedOff ? '✓' : '☐'} {t.topSleeved ? '🛡 ' : ''}{t.isGiveaway ? '🎁 ' : ''}{t.teamName}
                           </span>
                         ))}
                       </div>

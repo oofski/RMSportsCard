@@ -66,18 +66,8 @@ export const parseStatus = (jobId) => request(`/api/parse/status/${jobId}`)
 export const summary = () => request('/api/summary')
 export const loadDemo = () => request('/api/parse/demo', { method: 'POST' })
 
-// ---- Sleeve templates (top-sleeve tagging) --------------------------------
-// A template marks, per break number, which teams get a toploader/sleeve.
-// Applying it tags the current event's team slots (topSleeved) so the pick
-// screen shows which cards need extra protection.
-export const listSleeveTemplates = () => request('/api/sleeve-templates')
-export const getSleeveTemplate = (id) => request(`/api/sleeve-templates/${id}`)
-export const createSleeveTemplate = (payload) => request('/api/sleeve-templates', { method: 'POST', body: payload })
-export const updateSleeveTemplate = (id, payload) => request(`/api/sleeve-templates/${id}`, { method: 'PATCH', body: payload })
-export const deleteSleeveTemplate = (id) => request(`/api/sleeve-templates/${id}`, { method: 'DELETE' })
-export const applySleeveTemplate = (id) => request(`/api/sleeve-templates/${id}/apply`, { method: 'POST' })
-export const setDefaultSleeveTemplate = (id, on = true) => request(`/api/sleeve-templates/${id}/default`, { method: 'POST', body: { on } })
-export const clearSleeveTags = () => request('/api/sleeve-tags/clear', { method: 'POST' })
+// ---- Top-sleeve tagging ---------------------------------------------------
+// Tag which cards need a toploader/sleeve, per slot or in bulk per break.
 // Toggle one slot's top-sleeve tag (reuses the team-slot PATCH endpoint).
 export const toggleTeamSlotSleeve = (id, topSleeved) => request(`/api/teamslot/${id}`, { method: 'PATCH', body: { topSleeved } })
 
@@ -87,6 +77,8 @@ export const getBreak = (id) => request(`/api/breaks/${id}`)
 export const toggleTeamSlot = (id, checkedOff) => request(`/api/teamslot/${id}`, { method: 'PATCH', body: { checkedOff } })
 export const packBreak = (id) => request(`/api/breaks/${id}/pack`, { method: 'POST' })
 export const clearBreak = (id) => request(`/api/breaks/${id}/clear`, { method: 'POST' })
+// Bulk set/clear the top-sleeve tag for every team slot in a break.
+export const setBreakTopSleeved = (id, on) => request(`/api/breaks/${id}/sleeve-all`, { method: 'POST', body: { topSleeved: on } })
 
 // ---- Shipments (Module B) -------------------------------------------------
 export const getShipments = () => request('/api/shipments')

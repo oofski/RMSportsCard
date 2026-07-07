@@ -30,7 +30,7 @@ export default function Upload({ onImported }) {
   const [phase, setPhase] = useState('idle') // see header for the state machine
   const [dragging, setDragging] = useState(false) // dropzone hover highlight
   const [file, setFile] = useState(null) // the chosen File (null until selected)
-  const [sport, setSport] = useState('auto') // league picker: auto | nfl | mlb
+  const [sport, setSport] = useState('auto') // league picker: auto | nfl | mlb | nba
   const [jobId, setJobId] = useState(null) // parse job id returned by uploadPdf
   const [progress, setProgress] = useState(null) // latest parseStatus payload
   const [summary, setSummary] = useState(null) // event summary once complete

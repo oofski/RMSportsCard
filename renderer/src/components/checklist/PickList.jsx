@@ -24,6 +24,8 @@ export default function PickList({
   onBack,           // () => return to the selection list
   onToggleSlot,     // (slotId, nextChecked) => optimistic toggle + persist
   onToggleSleeve,   // (slotId, nextSleeved) => toggle the top-sleeve tag
+  onSleeveAll,      // () => top-sleeve every slot in this break
+  onClearSleeves,   // () => remove the top-sleeve tag from every slot in this break
   onMarkAllPacked,  // () => check every currently-unchecked slot
   onClearAll,       // () => clearBreak then reload
   onConfirmPacked,  // () => packBreak(id) then refresh (completion prompt)
@@ -91,12 +93,27 @@ export default function PickList({
         <span className="mono small nowrap" style={{ minWidth: 44, textAlign: 'right' }}>{pct}%</span>
       </div>
 
-      {/* Top-sleeve summary for this break (from an applied template / manual tags). */}
-      {sleevedCount > 0 && (
-        <div className="row" style={{ marginBottom: 2 }}>
-          <span className="badge sleeve">🛡 {sleevedCount} top-sleeved</span>
-        </div>
-      )}
+      {/* Per-break bulk top-sleeve control (sport-agnostic — operates on slots). */}
+      <div className="row" style={{ gap: 8, marginBottom: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+        {sleevedCount > 0 && <span className="badge sleeve">🛡 {sleevedCount} top-sleeved</span>}
+        <span style={{ flex: 1 }} />
+        <button
+          className="btn btn-sm"
+          disabled={busyBulk || total === 0 || sleevedCount === total}
+          onClick={onSleeveAll}
+          title="Mark every team on this break as top-sleeved"
+        >
+          🛡 Top-sleeve all
+        </button>
+        <button
+          className="btn btn-sm btn-ghost"
+          disabled={busyBulk || sleevedCount === 0}
+          onClick={onClearSleeves}
+          title="Remove the top-sleeve tag from every team on this break"
+        >
+          Clear sleeves
+        </button>
+      </div>
 
       {/* ---- Completion prompt (§6.4) ------------------------------------- */}
       {allChecked && !promptDismissed && brk.status !== 'packed' && brk.status !== 'shipped' && (

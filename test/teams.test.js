@@ -87,9 +87,31 @@ describe('createTeamMatcher — MLB', () => {
   })
 
   it('unknown sport falls back to NFL (32 teams)', () => {
-    const m = createTeamMatcher('nba') // not a real sport here
+    const m = createTeamMatcher('nhl') // not a registered sport
     expect(m.sport).toBe('nfl')
     expect(m.CANONICAL).toHaveLength(32)
+  })
+})
+
+describe('createTeamMatcher — NBA', () => {
+  const nba = createTeamMatcher('nba')
+
+  it('exposes exactly the 30 NBA teams and matches each one', () => {
+    expect(nba.sport).toBe('nba')
+    expect(nba.CANONICAL).toHaveLength(30)
+    for (const t of nba.CANONICAL) expect(nba.matchTeam(t).team).toBe(t)
+  })
+
+  it('matches multi-word + numeric NBA names', () => {
+    expect(nba.matchTeam('los angeles clippers').team).toBe('Los Angeles Clippers')
+    expect(nba.matchTeam('Portland Trail Blazers').team).toBe('Portland Trail Blazers')
+    expect(nba.matchTeam('Philadelphia 76ers').team).toBe('Philadelphia 76ers')
+  })
+
+  it('does NOT bleed across leagues (Bulls/Bears, Cavaliers/Browns)', () => {
+    expect(createTeamMatcher('nfl').matchTeam('Chicago Bulls').team).toBeNull()
+    expect(nba.matchTeam('Chicago Bears').team).toBeNull()
+    expect(nba.matchTeam('Cleveland Browns').team).toBeNull()
   })
 })
 
@@ -99,6 +121,14 @@ describe('detectSport', () => {
   })
   it('classifies a batch of NFL names as nfl', () => {
     expect(detectSport(['Kansas City Chiefs', 'New York Giants', 'Dallas Cowboys'])).toBe('nfl')
+  })
+  it('classifies a batch of NBA names as nba', () => {
+    expect(detectSport(['Los Angeles Lakers', 'Boston Celtics', 'Golden State Warriors'])).toBe('nba')
+  })
+  it('separates the three leagues that all field a "Los Angeles" team', () => {
+    expect(detectSport(['Los Angeles Lakers', 'Los Angeles Clippers', 'Boston Celtics'])).toBe('nba')
+    expect(detectSport(['Los Angeles Rams', 'Los Angeles Chargers', 'Dallas Cowboys'])).toBe('nfl')
+    expect(detectSport(['Los Angeles Dodgers', 'Los Angeles Angels', 'New York Yankees'])).toBe('mlb')
   })
   it('defaults to nfl on empty / unrecognizable input', () => {
     expect(detectSport([])).toBe('nfl')
@@ -111,9 +141,12 @@ describe('sport helpers', () => {
     expect(listTeams('nfl')).toHaveLength(32)
     expect(listTeams('mlb')).toHaveLength(30)
     expect(listTeams('mlb')).toContain('Athletics')
+    expect(listTeams('nba')).toHaveLength(30)
+    expect(listTeams('nba')).toContain('Los Angeles Clippers')
   })
   it('normalizeSport validates codes and defaults to nfl', () => {
     expect(normalizeSport('mlb')).toBe('mlb')
+    expect(normalizeSport('nba')).toBe('nba')
     expect(normalizeSport('NFL')).toBe('nfl')
     expect(normalizeSport('auto')).toBe('nfl')
     expect(normalizeSport(undefined)).toBe('nfl')

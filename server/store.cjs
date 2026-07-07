@@ -22,16 +22,10 @@ function emptyState() {
       schemaVersion: 1,
       importedAt: null,
       event: { name: null, date: null },
-      // Which league the current import was parsed as ('nfl' | 'mlb'). Drives the
-      // sport-aware fidelity audit (32 NFL teams vs 30 MLB). Defaults to NFL.
+      // Which league the current import was parsed as ('nfl' | 'mlb' | 'nba').
+      // Drives the sport-aware fidelity audit (32 NFL, 30 MLB/NBA). Defaults NFL.
       sport: 'nfl',
       breaksPerEvent: 9,
-      // Sleeve templates: which saved template (if any) auto-applies on every
-      // import, and which template is currently applied to the live event (for
-      // display). Both null until the user creates/applies a template.
-      defaultSleeveTemplateId: null,
-      appliedSleeveTemplateId: null,
-      appliedSleeveTemplateName: null,
     },
     users: [],
     breaks: [],
@@ -52,13 +46,6 @@ function emptyState() {
     // Uploaded Whatnot ledger CSV (Sales Dashboard). { filename, uploadedAt,
     // rows:[classified], settings:{ breaksPerCase } } or null.
     ledger: null,
-    // Saved "top-sleeve" templates. Each marks, per break number, which teams
-    // get a toploader/sleeve so an import can be tagged in one click:
-    //   { id, name, sport, breaks: { "<breakNumber>": ["Team", ...] },
-    //     createdAt, updatedAt }
-    // Applying a template sets teamSlot.topSleeved on matching (break, team)
-    // slots. Persists across PDF re-imports, like the user table.
-    sleeveTemplates: [],
   }
 }
 
