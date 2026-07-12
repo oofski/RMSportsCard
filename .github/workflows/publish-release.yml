@@ -1,21 +1,27 @@
 name: Publish Release
 
 # Publishes a GitHub Release whose downloadable asset is the installer already
-# committed under dist/ (the same file the in-app auto-update feed serves). Run
-# it from the Actions tab (or via API) with the version to publish. The release
-# is created BY the GitHub runner using the built-in token, which sidesteps the
-# build environment's inability to push tags/releases directly.
+# committed under dist/ (the same file the in-app auto-update feed serves).
+#
+# It runs automatically on a push that changes dist/ or package.json (the version
+# is read from package.json), and is idempotent: it creates the vX.Y.Z release
+# once and otherwise just refreshes the asset. The release is created BY the
+# GitHub runner using the built-in token, which sidesteps the build environment's
+# inability to push tags or dispatch workflows directly.
 on:
-  # Preferred: push a tag like v1.5.20. Also dispatchable from the Actions tab.
   push:
-    tags:
-      - 'v*'
+    branches:
+      - claude/pensive-brahmagupta-v0gvp5
+    paths:
+      - 'dist/**'
+      - 'package.json'
+      - '.github/workflows/publish-release.yml'
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to publish (e.g. 1.5.20)'
-        required: true
-        default: '1.5.20'
+        description: 'Version to publish (e.g. 1.5.20). Blank = read from package.json.'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -27,16 +33,14 @@ jobs:
       - name: Check out the repo (includes the committed installer in dist/)
         uses: actions/checkout@v4
 
-      - name: Create the release and attach the installer
+      - name: Create/refresh the release and attach the installer
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_VERSION: ${{ github.event.inputs.version }}
-          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Version comes from the workflow input, else from the tag (strip 'v').
           VERSION="${INPUT_VERSION:-}"
-          if [ -z "$VERSION" ]; then VERSION="${REF_NAME#v}"; fi
+          if [ -z "$VERSION" ]; then VERSION="$(node -p "require('./package.json').version")"; fi
           ASSET="dist/RM-Cardz-Setup-${VERSION}.exe"
           if [ ! -f "$ASSET" ]; then
             echo "::error::Installer not found at $ASSET (is it committed for this version?)"
@@ -49,7 +53,7 @@ jobs:
 
           See CHANGELOG.md for what changed."
           if gh release view "v${VERSION}" >/dev/null 2>&1; then
-            echo "Release v${VERSION} exists — updating its asset + notes."
+            echo "Release v${VERSION} exists — refreshing its asset + notes."
             gh release upload "v${VERSION}" "$ASSET" --clobber
             gh release edit "v${VERSION}" --title "RM Cardz v${VERSION}" --notes "$NOTES" --latest
           else
