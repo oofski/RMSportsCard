@@ -28,12 +28,16 @@ function nextStageCode(stage) {
   return i >= 0 && i < PIPELINE_ORDER.length - 1 ? PIPELINE_ORDER[i + 1] : 'all_good'
 }
 
-export default function OrderQueue({ currentUser }) {
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
+// `initialOrders` / `initialBreakFilter` are optional test seams: when supplied
+// the component seeds from them and skips the network fetch (used by the render
+// smoke test). Production passes neither.
+export default function OrderQueue({ currentUser, initialOrders, initialBreakFilter = null }) {
+  const [orders, setOrders] = useState(initialOrders || [])
+  const [loading, setLoading] = useState(!initialOrders)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('all') // all | <stage> | held | flagged
   const [search, setSearch] = useState('')
+  const [breakFilter, setBreakFilter] = useState(initialBreakFilter) // null = all breaks; else a break number
   const [expanded, setExpanded] = useState(() => new Set())
   const [toast, setToast] = useState('')
   const [tracking, setTracking] = useState(null) // { done, total } while scanning
@@ -49,7 +53,7 @@ export default function OrderQueue({ currentUser }) {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (initialOrders) return; load() }, [load]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toastTimer = useRef(null)
   const flash = useCallback((msg) => {
@@ -198,6 +202,20 @@ export default function OrderQueue({ currentUser }) {
     })
   }, [orders, filter, search])
 
+  // Every break number that appears across all orders, ascending — drives the
+  // "By break" selector.
+  const allBreaks = useMemo(() => {
+    const s = new Set()
+    orders.forEach((o) => (o.breaks || []).forEach((b) => s.add(b.breakNumber)))
+    return [...s].sort((a, b) => a - b)
+  }, [orders])
+
+  // When a break is selected, split the (already stage/search-filtered) list into
+  // the packages that contain that break and everyone else.
+  const orderHasBreak = (o, n) => (o.breaks || []).some((b) => b.breakNumber === n)
+  const inBreak = breakFilter != null ? visible.filter((o) => orderHasBreak(o, breakFilter)) : []
+  const others = breakFilter != null ? visible.filter((o) => !orderHasBreak(o, breakFilter)) : []
+
   const toggleExpand = (id) => setExpanded((prev) => {
     const n = new Set(prev)
     n.has(id) ? n.delete(id) : n.add(id)
@@ -215,7 +233,138 @@ export default function OrderQueue({ currentUser }) {
   ]
 
   // Manual reordering is only coherent when the displayed list == the full queue.
-  const reorderable = filter === 'all' && !search.trim()
+  const reorderable = filter === 'all' && !search.trim() && breakFilter == null
+
+  // One collapsed+expandable order row. `list` is the group it renders within (so
+  // the move-down button knows the last row); `focusBreak` is that order's slice
+  // of the selected break, shown inline so "Break #9" reads as its people + teams.
+  const orderRow = (o, idx, list) => {
+    const flagged = FLAGGED.has(o.stage)
+    const sd = stageByCode[o.stage] || {}
+    const isExpanded = expanded.has(o.id)
+    const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
+    const focusBreak = breakFilter != null ? (o.breaks || []).find((b) => b.breakNumber === breakFilter) : null
+    return (
+      <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
+        {/* Collapsed row — tap anywhere to drop down the team checklist. */}
+        <div
+          className="order-row-main"
+          role="button"
+          tabIndex={0}
+          onClick={() => toggleExpand(o.id)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(o.id) } }}
+        >
+          <span
+            className="order-status-pill"
+            style={{ '--pill': sd.color || '#9ca3af' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="dot" aria-hidden="true" />
+            {sd.label || o.stage}
+          </span>
+
+          <div className="order-row-id">
+            <strong>{o.customer.realName}</strong>
+            <span className="muted small">@{o.customer.handle}</span>
+            {focusBreak && (
+              <span className="badge" title={`Break #${breakFilter}: ${focusBreak.teams.map((t) => t.teamName).join(', ')}`}>
+                {focusBreak.teams.map((t) => t.teamName).join(', ') || `Break #${breakFilter}`}
+              </span>
+            )}
+            {o.customer.isNew && <span className="badge amber">New</span>}
+            {o.multiCard && (
+              <span className="badge red" title={`Multiple cards (${o.cardCount}) across this order — double-check every card is packed`}>
+                {o.cardCount} cards
+              </span>
+            )}
+            {o.multiCard && o.hasGiveaway && (
+              <span
+                className="badge giveaway-combo"
+                title={`${o.cardCount} cards including ${o.giveawayCount} giveaway${o.giveawayCount > 1 ? 's' : ''} — verify the giveaway card ships with this package`}
+              >
+                🎁 Giveaway + {o.cardCount} cards
+              </span>
+            )}
+            {o.topSleevedCount > 0 && (
+              <span className="badge sleeve solid" title={`${o.topSleevedCount} card(s) need a toploader`}>
+                🛡 {o.topSleevedCount} toploader{o.topSleevedCount > 1 ? 's' : ''}
+              </span>
+            )}
+            {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>Held</span>}
+          </div>
+
+          {/* Slim at-a-glance: pick progress only (details live in the drop-down). */}
+          <div className="order-row-meta small muted">
+            {o.breakCount > 1 && <span className="nowrap">{o.breakCount} breaks</span>}
+            <span className="bar bar-inline"><span className={pct >= 100 ? 'good' : ''} style={{ width: pct + '%' }} /></span>
+            <span className="mono">{o.pick.checked}/{o.pick.total}</span>
+          </div>
+
+          {/* One primary action + expander. (Stage-set moved into the drop-down.) */}
+          <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
+            {!sd.terminal && (
+              <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title={`Mark done → ${(stageByCode[nextStageCode(o.stage)] || {}).label}`}>
+                Done
+              </button>
+            )}
+            <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} aria-label={isExpanded ? 'Hide teams' : 'Show teams'}>
+              {isExpanded ? '▾' : '▸'}
+            </button>
+          </div>
+        </div>
+
+        {/* Drop-down: per-break team CHECKLIST + tucked secondary actions. */}
+        {isExpanded && (
+          <div className="order-row-detail">
+            {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
+            {o.breaks.map((b) => {
+              const done = b.teams.filter((t) => t.checkedOff).length
+              const complete = b.teams.length > 0 && done >= b.teams.length
+              const sleeved = b.teams.filter((t) => t.topSleeved).length
+              const isFocus = breakFilter != null && b.breakNumber === breakFilter
+              return (
+                <div key={b.breakNumber} className="break-group">
+                  <div className="bk">
+                    <span className="row" style={{ gap: 8, alignItems: 'center' }}>
+                      Break #{b.breakNumber}
+                      {isFocus && <span className="badge" style={{ padding: '0 6px' }}>selected</span>}
+                      {sleeved > 0 && <span className="badge sleeve small" title={`${sleeved} top-sleeved in this break`}>🛡 {sleeved}</span>}
+                    </span>
+                    <span className="mono small" style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
+                  </div>
+                  <div className="row" style={{ flexWrap: 'wrap' }}>
+                    {b.teams.map((t) => (
+                      <span
+                        key={t.slotId}
+                        className={`team-chip ${t.checkedOff ? 'checked' : ''} ${t.topSleeved ? 'sleeve' : ''} ${t.isGiveaway ? 'giveaway' : ''}`}
+                        onClick={() => toggleTeam(o, t)}
+                        title={`${t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}${t.topSleeved ? ' · Top-sleeved (needs a toploader)' : ''}${t.isGiveaway ? ' · Giveaway card' : ''}`}
+                      >
+                        {t.checkedOff ? '✓' : '☐'} {t.topSleeved ? '🛡 ' : ''}{t.isGiveaway ? '🎁 ' : ''}{t.teamName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Secondary actions tucked below a hairline so they recede. */}
+            <div className="order-detail-actions">
+              {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
+              <span className="spacer" />
+              <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? 'Resume' : 'Hold'}</button>
+              <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filters to reorder'} aria-label="Move up">↑</button>
+              <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === list.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filters to reorder'} aria-label="Move down">↓</button>
+              {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)} aria-label="Open USPS tracking">USPS</button>}
+              <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Set status" title="Set status">
+                {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="col" style={{ gap: 14 }}>
@@ -242,13 +391,26 @@ export default function OrderQueue({ currentUser }) {
         </div>
       )}
 
-      {/* Filter chips */}
+      {/* Filter chips + break selector + search */}
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         {FILTERS.map((f) => (
           <button key={f.key} className={`chip-filter ${filter === f.key ? 'active' : ''}`} onClick={() => setFilter(f.key)}>
             {f.label} <span className="muted">({counts[f.key] || 0})</span>
           </button>
         ))}
+        {allBreaks.length > 0 && (
+          <select
+            className="select"
+            style={{ width: 'auto' }}
+            value={breakFilter == null ? '' : String(breakFilter)}
+            onChange={(e) => setBreakFilter(e.target.value === '' ? null : Number(e.target.value))}
+            aria-label="Group orders by break"
+            title="Show one break's orders first, then the rest"
+          >
+            <option value="">All breaks</option>
+            {allBreaks.map((n) => <option key={n} value={n}>Break #{n}</option>)}
+          </select>
+        )}
         <input
           className="input"
           style={{ width: 'auto', flex: 1, minWidth: 200 }}
@@ -259,128 +421,30 @@ export default function OrderQueue({ currentUser }) {
         />
       </div>
 
-      {/* Simplified order list — one scannable row per order. The full pipeline,
-          hold/reorder, USPS and per-team pick detail live in the ▾ expand. */}
-      {visible.length === 0 && <div className="muted">No orders match this filter.</div>}
-      {visible.map((o, idx) => {
-        const flagged = FLAGGED.has(o.stage)
-        const sd = stageByCode[o.stage] || {}
-        const isExpanded = expanded.has(o.id)
-        const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
-        return (
-          <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
-            {/* Collapsed row — tap anywhere to drop down the team checklist. */}
-            <div
-              className="order-row-main"
-              role="button"
-              tabIndex={0}
-              onClick={() => toggleExpand(o.id)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleExpand(o.id) } }}
-            >
-              <span
-                className="order-status-pill"
-                style={{ '--pill': sd.color || '#9ca3af' }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <span className="dot" aria-hidden="true" />
-                {sd.label || o.stage}
-              </span>
-
-              <div className="order-row-id">
-                <strong>{o.customer.realName}</strong>
-                <span className="muted small">@{o.customer.handle}</span>
-                {o.customer.isNew && <span className="badge amber">New</span>}
-                {o.multiCard && (
-                  <span className="badge red" title={`Multiple cards (${o.cardCount}) across this order — double-check every card is packed`}>
-                    {o.cardCount} cards
-                  </span>
-                )}
-                {o.multiCard && o.hasGiveaway && (
-                  <span
-                    className="badge giveaway-combo"
-                    title={`${o.cardCount} cards including ${o.giveawayCount} giveaway${o.giveawayCount > 1 ? 's' : ''} — verify the giveaway card ships with this package`}
-                  >
-                    🎁 Giveaway + {o.cardCount} cards
-                  </span>
-                )}
-                {o.topSleevedCount > 0 && (
-                  <span className="badge sleeve solid" title={`${o.topSleevedCount} card(s) need a toploader`}>
-                    🛡 {o.topSleevedCount} toploader{o.topSleevedCount > 1 ? 's' : ''}
-                  </span>
-                )}
-                {o.onHold && <span className="badge" title={o.heldReason || 'On hold'}>Held</span>}
-              </div>
-
-              {/* Slim at-a-glance: pick progress only (details live in the drop-down). */}
-              <div className="order-row-meta small muted">
-                {o.breakCount > 1 && <span className="nowrap">{o.breakCount} breaks</span>}
-                <span className="bar bar-inline"><span className={pct >= 100 ? 'good' : ''} style={{ width: pct + '%' }} /></span>
-                <span className="mono">{o.pick.checked}/{o.pick.total}</span>
-              </div>
-
-              {/* One primary action + expander. (Stage-set moved into the drop-down.) */}
-              <div className="order-row-actions" onClick={(e) => e.stopPropagation()}>
-                {!sd.terminal && (
-                  <button className="btn btn-sm btn-primary" onClick={() => markDone(o)} title={`Mark done → ${(stageByCode[nextStageCode(o.stage)] || {}).label}`}>
-                    Done
-                  </button>
-                )}
-                <button className="btn btn-sm btn-ghost order-row-expand" onClick={() => toggleExpand(o.id)} aria-label={isExpanded ? 'Hide teams' : 'Show teams'}>
-                  {isExpanded ? '▾' : '▸'}
-                </button>
-              </div>
-            </div>
-
-            {/* Drop-down: per-break team CHECKLIST + tucked secondary actions. */}
-            {isExpanded && (
-              <div className="order-row-detail">
-                {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
-                {o.breaks.map((b) => {
-                  const done = b.teams.filter((t) => t.checkedOff).length
-                  const complete = b.teams.length > 0 && done >= b.teams.length
-                  const sleeved = b.teams.filter((t) => t.topSleeved).length
-                  return (
-                    <div key={b.breakNumber} className="break-group">
-                      <div className="bk">
-                        <span className="row" style={{ gap: 8, alignItems: 'center' }}>
-                          Break #{b.breakNumber}
-                          {sleeved > 0 && <span className="badge sleeve small" title={`${sleeved} top-sleeved in this break`}>🛡 {sleeved}</span>}
-                        </span>
-                        <span className="mono small" style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
-                      </div>
-                      <div className="row" style={{ flexWrap: 'wrap' }}>
-                        {b.teams.map((t) => (
-                          <span
-                            key={t.slotId}
-                            className={`team-chip ${t.checkedOff ? 'checked' : ''} ${t.topSleeved ? 'sleeve' : ''} ${t.isGiveaway ? 'giveaway' : ''}`}
-                            onClick={() => toggleTeam(o, t)}
-                            title={`${t.checkedOff ? 'Packed — click to undo' : 'Tick when this card is bagged'}${t.topSleeved ? ' · Top-sleeved (needs a toploader)' : ''}${t.isGiveaway ? ' · Giveaway card' : ''}`}
-                          >
-                            {t.checkedOff ? '✓' : '☐'} {t.topSleeved ? '🛡 ' : ''}{t.isGiveaway ? '🎁 ' : ''}{t.teamName}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )
-                })}
-
-                {/* Secondary actions tucked below a hairline so they recede. */}
-                <div className="order-detail-actions">
-                  {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
-                  <span className="spacer" />
-                  <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? 'Resume' : 'Hold'}</button>
-                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filter/search to reorder'} aria-label="Move up">↑</button>
-                  <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === visible.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filter/search to reorder'} aria-label="Move down">↓</button>
-                  {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)} aria-label="Open USPS tracking">USPS</button>}
-                  <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Set status" title="Set status">
-                    {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
+      {/* Order list — one scannable row per order. The full pipeline, hold/reorder,
+          USPS and per-team pick detail live in the ▾ expand. When a break is
+          selected, that break's packages are grouped first, then everyone else. */}
+      {breakFilter == null ? (
+        <>
+          {visible.length === 0 && <div className="muted">No orders match this filter.</div>}
+          {visible.map((o, idx) => orderRow(o, idx, visible))}
+        </>
+      ) : (
+        <>
+          <div className="section-title" style={{ margin: '4px 0' }}>
+            Break #{breakFilter} — {inBreak.length} package{inBreak.length === 1 ? '' : 's'}
           </div>
-        )
-      })}
+          {inBreak.length === 0
+            ? <div className="muted">No orders in Break #{breakFilter} match this filter.</div>
+            : inBreak.map((o, idx) => orderRow(o, idx, inBreak))}
+          <div className="section-title" style={{ margin: '20px 0 4px' }}>
+            Other orders — {others.length}
+          </div>
+          {others.length === 0
+            ? <div className="muted">No other orders.</div>
+            : others.map((o, idx) => orderRow(o, idx, others))}
+        </>
+      )}
 
       {toast && <div className="toast">{toast}</div>}
     </div>

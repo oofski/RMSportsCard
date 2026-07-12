@@ -1,8 +1,8 @@
-version: 1.5.19
+version: 1.5.20
 files:
-  - url: RM-Cardz-Setup-1.5.19.exe
-    sha512: TYIjbDGsoqq/UFFkE3l9foorHgD6cYaLUFCc03q9Y3YfgoJrkI3bPiKIkdyZLxQHOwioLBufNtLWnEzkdyLX+g==
-    size: 104531433
-path: RM-Cardz-Setup-1.5.19.exe
-sha512: TYIjbDGsoqq/UFFkE3l9foorHgD6cYaLUFCc03q9Y3YfgoJrkI3bPiKIkdyZLxQHOwioLBufNtLWnEzkdyLX+g==
-releaseDate: '2026-07-12T17:49:42.994Z'
+  - url: RM-Cardz-Setup-1.5.20.exe
+    sha512: esVZunixENo2/grNqZAOqcIfdE/VmrWX+vTp2d17N2VDottu8T7UKWVq5Nk9SkungQ/6a9DCUTGmP7XI5cZIaA==
+    size: 104531864
+path: RM-Cardz-Setup-1.5.20.exe
+sha512: esVZunixENo2/grNqZAOqcIfdE/VmrWX+vTp2d17N2VDottu8T7UKWVq5Nk9SkungQ/6a9DCUTGmP7XI5cZIaA==
+releaseDate: '2026-07-12T21:55:50.691Z'

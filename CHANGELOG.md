@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.20] - 2026-07-12
+
+### Added — Orders: view one break at a time
+- The Orders tab has a new **break selector**. Pick a break (e.g. **Break #9**)
+  and the list groups into **"Break #9 — N packages"** (only the people who have
+  a card in that break, with their team shown inline) followed by
+  **"Other orders"** (everyone else), so you can pull and pack one break's
+  shipments together, then move on to the rest.
+- Works alongside the existing stage filters and search; set the selector back to
+  **All breaks** to return to the full queue. (Uses the data from the PDF you
+  already upload — no separate upload needed.)
+
 ## [1.5.19] - 2026-07-12
 
 ### Fixed — Sales Dashboard sat empty for some ledger exports
