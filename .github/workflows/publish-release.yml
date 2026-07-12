@@ -6,6 +6,10 @@ name: Publish Release
 # is created BY the GitHub runner using the built-in token, which sidesteps the
 # build environment's inability to push tags/releases directly.
 on:
+  # Preferred: push a tag like v1.5.20. Also dispatchable from the Actions tab.
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -26,9 +30,13 @@ jobs:
       - name: Create the release and attach the installer
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ github.event.inputs.version }}
+          INPUT_VERSION: ${{ github.event.inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
+          # Version comes from the workflow input, else from the tag (strip 'v').
+          VERSION="${INPUT_VERSION:-}"
+          if [ -z "$VERSION" ]; then VERSION="${REF_NAME#v}"; fi
           ASSET="dist/RM-Cardz-Setup-${VERSION}.exe"
           if [ ! -f "$ASSET" ]; then
             echo "::error::Installer not found at $ASSET (is it committed for this version?)"
