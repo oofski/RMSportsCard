@@ -289,7 +289,7 @@ export function Donut({
 
   // Sanitize (clamp to ≥ 0, drop zero slices), sort desc, fold tail → "Other".
   const clean = (Array.isArray(slices) ? slices : [])
-    .map((s) => ({ label: String((s && s.label) ?? ''), value: safeNonNeg(s && s.value) }))
+    .map((s) => ({ label: String((s && s.label) ?? ''), value: safeNonNeg(s && s.value), title: s && s.title }))
     .filter((s) => s.value > 0)
     .sort((a, b) => b.value - a.value)
   const kept = clean.slice(0, maxSlices)
@@ -454,7 +454,7 @@ export function Donut({
               <span
                 className="small"
                 style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                title={s.label}
+                title={s.title || s.label}
               >
                 {s.label}
               </span>

@@ -211,16 +211,20 @@ const SALE_TYPE_LABELS = {
 const PRODUCT_FILLER = new Set(['NEW', 'RELEASE', 'RELASE', 'THE', 'A', 'AND', 'OF', 'FOR', 'WITH', 'ON', 'SCREEN', 'NO', 'TO', 'IN'])
 function productFamily(product) {
   let s = String(product == null ? '' : product).toUpperCase()
-  s = s.replace(/^\s*\d+\s*X\s+/, '')                 // leading "1x" / "2 x"
-  s = s.replace(/^\s*\d{4}(?:[\/-]\d{2,4})?\s+/, '')  // leading "2025" / "2025-26" / "2025/26"
+  s = s.replace(/^\s*\d+\s*X\s+/, '')                          // leading "1x" / "2 x"
+  s = s.replace(/^\s*\d{4}(?:\s*[\/-]\s*\d{2,4})?\s+/, '')     // leading "2025" / "2025-26" / "2025 / 26"
   s = s.replace(/[^A-Z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+  // A "significant" token: not a filler word and not a bare number (a stray
+  // year/quantity that slipped through) — those must never become the label.
+  const sig = (w) => w && !PRODUCT_FILLER.has(w) && !/^\d+$/.test(w)
   const keep = []
-  for (const w of s.split(' ')) {
-    if (!w || PRODUCT_FILLER.has(w)) continue
-    keep.push(w)
-    if (keep.length >= 2) break
+  for (const w of s.split(' ')) { if (!sig(w)) continue; keep.push(w); if (keep.length >= 2) break }
+  if (keep.length === 0) {
+    // Empty-safe fallback: first significant token, else 'Other'. (Old code
+    // could return '' for e.g. "BASEBALL BREAK #3" once the sport word led.)
+    const first = s.split(' ').find(sig)
+    return first ? first.charAt(0) + first.slice(1).toLowerCase() : 'Other'
   }
-  if (keep.length === 0) return 'Other'
   return keep.map((w) => w.charAt(0) + w.slice(1).toLowerCase()).join(' ')
 }
 
@@ -451,6 +455,30 @@ function round2(n) {
   return Object.is(r, -0) ? 0 : r
 }
 
+/**
+ * Normalize the user-entered manual cost inputs (COGS, shipping, supplies,
+ * labor, hours, cancellations). Every dollar/rate field is coerced to a
+ * non-negative number; "total" overrides are null when blank (so a per-unit
+ * rate is used instead). hoursLog is a list of { id, date, hours, note }.
+ * Pure + defensive so a malformed persisted object never throws downstream.
+ * @param {object} ci
+ */
+function normalizeCostInputs(ci) {
+  const c = ci && typeof ci === 'object' ? ci : {}
+  const num = (v) => { const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : 0 }
+  const orNull = (v) => { if (v == null || v === '') return null; const n = Number(v); return Number.isFinite(n) && n >= 0 ? n : null }
+  const hoursLog = Array.isArray(c.hoursLog) ? c.hoursLog.map((h, i) => ({
+    id: (h && h.id) || `h${i}`, date: String((h && h.date) || ''), hours: num(h && h.hours), note: String((h && h.note) || ''),
+  })) : []
+  return {
+    giveawayCogsPerUnit: num(c.giveawayCogsPerUnit), giveawayCogsTotal: orNull(c.giveawayCogsTotal),
+    giveawayShipPerUnit: num(c.giveawayShipPerUnit), giveawayShipTotal: orNull(c.giveawayShipTotal),
+    suppliesTotal: num(c.suppliesTotal), laborDirect: num(c.laborDirect), laborHourlyRate: num(c.laborHourlyRate),
+    hoursLog, cancellationsOverride: orNull(c.cancellationsOverride),
+    productGrouping: c.productGrouping === 'full' ? 'full' : 'family',
+  }
+}
+
 /** Whole-day difference between two YYYY-MM-DD day keys (b - a), inclusive-safe. */
 function dayDiff(a, b) {
   const [ay, am, ad] = a.split('-').map(Number)
@@ -469,9 +497,12 @@ function dayDiff(a, b) {
  * @param {{ breaksPerCase?: number }} [opts]
  * @returns {object}
  */
-function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
+function analyzeLedger(rows, { breaksPerCase = 9, costInputs = {} } = {}) {
   // Guard the divisor: a case must hold at least one break.
   const bpc = Math.max(1, Math.floor(Number(breaksPerCase) || 9))
+  // Normalize the manual cost inputs (authoritative here — callers may pass raw).
+  const ci = normalizeCostInputs(costInputs)
+  const groupFull = ci.productGrouping === 'full'
 
   const totals = {
     grossEarnings: 0,
@@ -486,6 +517,13 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
     adjustmentCount: 0,
     tipCount: 0,
     otherCount: 0,
+    // Memo accumulators: unclassified SALES sum, auto-detected refunds, and
+    // negative earnings (a partial refund landing on an earning row).
+    otherSum: 0,
+    refundCount: 0,
+    refundsSum: 0,
+    refundedEarningsCount: 0,
+    refundedEarningsSum: 0,
   }
 
   // day -> { gross, giveaway, count }
@@ -512,8 +550,14 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
   // `${day}|${familyKey}` -> { productLabel, revenue, count } — day drill-down
   // by product (reconciles to the day's gross).
   const perDayProductsMap = new Map()
-  // Costs & extras: giveaways, shipping subsidies, platform fees, tips.
-  const costs = { giveaways: 0, shippingSubsidies: 0, platformFees: 0, otherAdjustments: 0, tips: 0 }
+  // Costs & extras: giveaways, tips, and the ADJUSTMENT bucket split by message
+  // into shipping subsidy (income), shipping cost, promotion/boost fee, seller
+  // bonus (income), other fees, and other positive adjustments. platformFees is
+  // kept as a deprecated alias (= the old lump of ALL negative adjustments).
+  const costs = {
+    giveaways: 0, shippingSubsidies: 0, shippingCosts: 0, promotionFees: 0,
+    sellerBonuses: 0, otherFees: 0, platformFees: 0, otherAdjustments: 0, tips: 0,
+  }
   const daysSeen = new Set()
   const warnings = []
   let otherSampled = 0
@@ -533,14 +577,19 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       case 'earning': {
         totals.grossEarnings += amt
         totals.earningCount += 1
+        if (amt < 0) { totals.refundedEarningsCount += 1; totals.refundedEarningsSum += amt }
         bumpDay(row.dayKey, 'gross', amt)
         // Revenue by product family (ALL earnings, attributed or not), the
-        // sale-type mix, and the per-day product breakdown.
-        const famLabel = productFamily(row.product)
-        const famKey = famLabel.toUpperCase()
+        // sale-type mix, and the per-day product breakdown. Grouping is 'family'
+        // (clean short label) by default or 'full' (exact product string) when
+        // the user opts in. The representative `product` is the highest-revenue
+        // single row in the group, so hovers show a real, meaningful name.
+        const famLabel = groupFull ? row.product : productFamily(row.product)
+        const famKey = groupFull ? row.productKey : famLabel.toUpperCase()
         let fam = productFamilyMap.get(famKey)
-        if (!fam) { fam = { productLabel: famLabel, product: row.product, revenue: 0, count: 0 }; productFamilyMap.set(famKey, fam) }
+        if (!fam) { fam = { productLabel: famLabel, product: row.product, _maxAmt: amt, revenue: 0, count: 0 }; productFamilyMap.set(famKey, fam) }
         fam.revenue += amt; fam.count += 1
+        if (amt > fam._maxAmt) { fam._maxAmt = amt; fam.product = row.product }
         const stype = classifySaleType(row)
         let st = saleTypeMap.get(stype)
         if (!st) { st = { revenue: 0, count: 0 }; saleTypeMap.set(stype, st) }
@@ -548,8 +597,9 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         if (row.dayKey) {
           const dpKey = `${row.dayKey}|${famKey}`
           let dp = perDayProductsMap.get(dpKey)
-          if (!dp) { dp = { productLabel: famLabel, revenue: 0, count: 0 }; perDayProductsMap.set(dpKey, dp) }
+          if (!dp) { dp = { productLabel: famLabel, product: row.product, _maxAmt: amt, revenue: 0, count: 0 }; perDayProductsMap.set(dpKey, dp) }
           dp.revenue += amt; dp.count += 1
+          if (amt > dp._maxAmt) { dp._maxAmt = amt; dp.product = row.product }
         }
         if (row.breakNumber != null) {
           const pkey = row.productKey
@@ -562,7 +612,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
               product: row.product,
               breakNumber: row.breakNumber,
               day: row.dayKey,
-              label: `Break ${row.breakNumber} · ${simplifyProduct(row.product)} · ${formatDayLabel(row.dayKey)}`,
+              label: `Break ${row.breakNumber} · ${productFamily(row.product)} · ${formatDayLabel(row.dayKey)}`,
               revenue: 0,
               count: 0,
             }
@@ -575,7 +625,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
           let db = perDayBreakdownMap.get(bkey)
           if (!db) {
             db = {
-              label: `Break ${row.breakNumber} · ${simplifyProduct(row.product)}`,
+              label: `Break ${row.breakNumber} · ${productFamily(row.product)}`,
               product: row.product,
               breakNumber: row.breakNumber,
               day: row.dayKey,
@@ -609,16 +659,28 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         totals.giveawayCount += 1
         bumpDay(row.dayKey, 'giveaway', amt)
         break
-      case 'adjustment':
+      case 'adjustment': {
         totals.adjustments += amt
         totals.adjustmentCount += 1
-        // Bucket adjustments so the "Costs & extras" summary can explain them:
-        // shipping subsidies (money in), platform fees / boosts (money out), and
-        // any other positive adjustment (e.g. a seller bonus).
-        if (amt > 0 && /shipping\s*subsidy/i.test(row.message || '')) costs.shippingSubsidies += amt
-        else if (amt < 0) costs.platformFees += amt
+        // Split the ADJUSTMENT bucket by its message so each real cost/income is
+        // visible on its own (the old code lumped every negative one together):
+        //   "Shipping Subsidy"                          -> income (shippingSubsidies)
+        //   "Whatnot platform charge for shipping ..."  -> shipping COST
+        //   "Seller purchased Show Boost ..."           -> promotion fee
+        //   "Super Seller Bonus"                        -> income (sellerBonuses)
+        //   any other negative                          -> otherFees
+        //   any other positive                          -> otherAdjustments
+        // The `amt < 0` guards keep a positive "Show Boost"/"shipping" line on
+        // the income side rather than mis-filing it as a fee. First match wins.
+        const m = row.message || ''
+        if (amt > 0 && /shipping\s*subsid/i.test(m)) costs.shippingSubsidies += amt
+        else if (amt < 0 && /shipping/i.test(m)) costs.shippingCosts += amt
+        else if (amt < 0 && /boost|promo/i.test(m)) costs.promotionFees += amt
+        else if (amt > 0 && /bonus/i.test(m)) costs.sellerBonuses += amt
+        else if (amt < 0) costs.otherFees += amt
         else costs.otherAdjustments += amt
         break
+      }
       case 'tip':
         totals.tips += amt
         totals.tipCount += 1
@@ -628,13 +690,24 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
         totals.payoutsIgnoredSum += amt
         // intentionally excluded from revenue, perDay and date range
         break
-      default: // 'other'
-        totals.otherCount += 1
-        if (otherSampled < 10) {
-          warnings.push(`unclassified SALES row: ${JSON.stringify(String(row.message || '').slice(0, 80))}`)
-          otherSampled += 1
+      default: { // 'other' — includes best-effort refund/cancellation detection
+        const m = row.message || ''
+        if (amt < 0 && /refund|cancel|return|reversal/i.test(m)) {
+          // A negative SALES row that reads as a refund/cancellation. Tracked as
+          // its own bucket (magnitude subtracted from profit); NOT counted as an
+          // "unclassified" warning and NOT fed into gross / the date range.
+          totals.refundCount += 1
+          totals.refundsSum += amt // <= 0
+        } else {
+          totals.otherCount += 1
+          totals.otherSum += amt
+          if (otherSampled < 10) {
+            warnings.push(`unclassified SALES row: ${JSON.stringify(String(m).slice(0, 80))}`)
+            otherSampled += 1
+          }
         }
         break
+      }
     }
   }
 
@@ -691,7 +764,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
     const day = key.slice(0, key.indexOf('|'))
     let list = productsByDay.get(day)
     if (!list) { list = []; productsByDay.set(day, list) }
-    list.push({ productLabel: v.productLabel, revenue: round2(v.revenue), count: v.count })
+    list.push({ productLabel: v.productLabel, product: v.product, revenue: round2(v.revenue), count: v.count })
   }
 
   // perDay sorted ascending by day. `products` is that day's revenue grouped by
@@ -717,6 +790,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
   const perBreak = [...perBreakMap.values()]
     .map((v) => ({
       product: v.product,
+      productLabel: productFamily(v.product),
       breakNumber: v.breakNumber,
       day: v.day,
       label: v.label,
@@ -742,7 +816,7 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       totalBreaks += breaks
       totalCases += cases
       attributedRevenue += p.revenue
-      return { product: p.product, breaks, cases, revenue: round2(p.revenue) }
+      return { product: p.product, productLabel: productFamily(p.product), breaks, cases, revenue: round2(p.revenue) }
     })
     .sort((a, b) => {
       const p = a.product.localeCompare(b.product)
@@ -778,19 +852,111 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
     }))
     .sort((a, b) => b.revenue - a.revenue)
 
-  // Costs & extras summary. giveaways/tips mirror the totals; adjustments are
-  // split into money-in (shipping subsidies) vs money-out (platform fees/boosts).
+  // Costs & extras summary. giveaways/tips mirror the totals; the ADJUSTMENT
+  // bucket is now split into named income/cost lines.
   costs.giveaways = round2(totals.giveawayLost)
   costs.tips = round2(totals.tips)
   costs.shippingSubsidies = round2(costs.shippingSubsidies)
-  costs.platformFees = round2(costs.platformFees)
+  costs.shippingCosts = round2(costs.shippingCosts)
+  costs.promotionFees = round2(costs.promotionFees)
+  costs.sellerBonuses = round2(costs.sellerBonuses)
+  costs.otherFees = round2(costs.otherFees)
   costs.otherAdjustments = round2(costs.otherAdjustments)
-  costs.adjustmentsNet = round2(costs.shippingSubsidies + costs.platformFees + costs.otherAdjustments)
+  // Deprecated alias — the OLD "platformFees" lump = every negative adjustment
+  // (shipping cost + promotion fee + other fees). Kept for back-compat; the UI
+  // now shows the split fields instead.
+  costs.platformFees = round2(costs.shippingCosts + costs.promotionFees + costs.otherFees)
+  // Net of every adjustment line — invariant: adjustmentsNet === totals.adjustments.
+  costs.adjustmentsNet = round2(costs.shippingSubsidies + costs.shippingCosts + costs.promotionFees + costs.sellerBonuses + costs.otherFees + costs.otherAdjustments)
+  // Net shipping = subsidy income minus shipping cost (a quick "is shipping
+  // paying for itself?" read-out).
+  costs.netShipping = round2(costs.shippingSubsidies + costs.shippingCosts)
+
+  // --- Ledger composition (raw transaction vocabulary) ----------------------
+  // The counts + sums of each RAW ledger type, so the operator can see what the
+  // file actually contained (distinct from the derived sale-category mix).
+  const transactionMix = [
+    { type: 'earning', label: 'Sales (earnings)', count: totals.earningCount, amount: round2(totals.grossEarnings) },
+    { type: 'giveaway', label: 'Giveaways', count: totals.giveawayCount, amount: round2(totals.giveawayLost) },
+    { type: 'adjustment', label: 'Adjustments', count: totals.adjustmentCount, amount: round2(totals.adjustments) },
+    { type: 'tip', label: 'Tips', count: totals.tipCount, amount: round2(totals.tips) },
+    { type: 'payout', label: 'Payouts (ignored)', count: totals.payoutsIgnoredCount, amount: round2(totals.payoutsIgnoredSum) },
+    { type: 'other', label: 'Unclassified', count: totals.otherCount, amount: round2(totals.otherSum) },
+  ]
+
+  // --- PROFIT model ---------------------------------------------------------
+  // Start from the ledger's own net (revenue + every adjustment line), then
+  // subtract the manual cost inputs the operator entered. All math on RAW
+  // values; round only at the output boundary (avoids penny drift).
+  //   ledgerNet      = grossEarnings + giveawayLost + adjustments
+  //   initialProfit  = ledgerNet − giveawayCOGS − giveawayShipping − cancellations
+  //   fullProfit     = initialProfit − supplies − labor
+  const gc = ci.giveawayCogsTotal != null ? ci.giveawayCogsTotal : ci.giveawayCogsPerUnit * totals.giveawayCount
+  const gs = ci.giveawayShipTotal != null ? ci.giveawayShipTotal : ci.giveawayShipPerUnit * totals.giveawayCount
+  const loggedHours = ci.hoursLog.reduce((s, h) => s + h.hours, 0)
+  const laborFromHours = ci.laborHourlyRate * loggedHours
+  const labor = ci.laborDirect + laborFromHours
+  const supplies = ci.suppliesTotal
+  const cancellationsAuto = -totals.refundsSum // magnitude >= 0
+  const cancellations = ci.cancellationsOverride != null ? ci.cancellationsOverride : cancellationsAuto
+  const ledgerNet = netRevenueRaw + totals.adjustments
+  const initialProfit = ledgerNet - gc - gs - cancellations
+  const fullProfit = initialProfit - supplies - labor
+  const gForM = totals.grossEarnings || 0
+  const profit = {
+    grossSales: round2(totals.grossEarnings),
+    ledgerNet: round2(ledgerNet),
+    breakCount: totalBreaks,
+    giveawayCount: totals.giveawayCount,
+    grossSalesPerBreak: round2(totalBreaks ? totals.grossEarnings / totalBreaks : 0),
+    income: {
+      grossEarnings: round2(totals.grossEarnings),
+      shippingSubsidies: costs.shippingSubsidies,
+      sellerBonuses: costs.sellerBonuses,
+      otherAdjustments: costs.otherAdjustments,
+    },
+    costs: {
+      shippingCosts: round2(-costs.shippingCosts),
+      promotionFees: round2(-costs.promotionFees),
+      otherFees: round2(-costs.otherFees),
+      giveawayCharge: round2(-totals.giveawayLost), // memo: already inside ledgerNet
+      cancellations: round2(cancellations),
+      giveawayCogs: round2(gc),
+      giveawayShipping: round2(gs),
+      supplies: round2(supplies),
+      labor: round2(labor),
+    },
+    labor: {
+      direct: round2(ci.laborDirect),
+      hourlyRate: round2(ci.laborHourlyRate),
+      hours: round2(loggedHours),
+      hourlyCost: round2(laborFromHours),
+      total: round2(labor),
+    },
+    hours: {
+      total: round2(loggedHours),
+      revenuePerHour: round2(loggedHours ? totals.grossEarnings / loggedHours : 0),
+      profitPerHour: round2(loggedHours ? fullProfit / loggedHours : 0),
+    },
+    cancellationsDetail: {
+      count: totals.refundCount,
+      amount: round2(cancellations),
+      auto: round2(cancellationsAuto),
+      source: ci.cancellationsOverride != null ? 'override' : 'auto',
+    },
+    initialProfit: round2(initialProfit),
+    fullProfit: round2(fullProfit),
+    initialMargin: round2(gForM ? (initialProfit / gForM) * 100 : 0),
+    fullMargin: round2(gForM ? (fullProfit / gForM) * 100 : 0),
+  }
 
   return {
     dateRange: { start, end, days },
     revenueByProduct,
     saleTypeMix,
+    transactionMix,
+    profit,
+    costInputs: ci,
     costs,
     totals: {
       grossEarnings: round2(totals.grossEarnings),
@@ -805,6 +971,11 @@ function analyzeLedger(rows, { breaksPerCase = 9 } = {}) {
       adjustmentCount: totals.adjustmentCount,
       tipCount: totals.tipCount,
       otherCount: totals.otherCount,
+      otherSum: round2(totals.otherSum),
+      refundCount: totals.refundCount,
+      refundsSum: round2(totals.refundsSum),
+      refundedEarningsCount: totals.refundedEarningsCount,
+      refundedEarningsSum: round2(totals.refundedEarningsSum),
     },
     perDay,
     perBreak,
@@ -829,5 +1000,5 @@ module.exports = {
   parseLedgerRows,
   analyzeLedger,
   // Exported for completeness / potential reuse; not part of the public contract.
-  _internal: { parseAmount, parseDayKey, parseSaleMessage, productKeyOf, classify, parseCsv, simplifyProduct, formatDayLabel },
+  _internal: { parseAmount, parseDayKey, parseSaleMessage, productKeyOf, classify, parseCsv, simplifyProduct, formatDayLabel, productFamily, normalizeCostInputs },
 }

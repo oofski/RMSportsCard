@@ -433,9 +433,21 @@ describe('Sales Dashboard redesign analytics', () => {
   it('costs breaks out giveaways / shipping subsidies / platform fees / tips', () => {
     expect(a.costs.giveaways).toBe(-3)
     expect(a.costs.shippingSubsidies).toBe(5)
-    expect(a.costs.platformFees).toBe(-8)
+    expect(a.costs.platformFees).toBe(-8) // deprecated alias = old negative-adjustment lump
     expect(a.costs.tips).toBe(10)
     expect(a.costs.adjustmentsNet).toBe(-3) // 5 - 8
+  })
+
+  it('splits the adjustment bucket into named income/cost lines', () => {
+    // The -8 "Whatnot platform charge for shipping" is a shipping COST now.
+    expect(a.costs.shippingCosts).toBe(-8)
+    expect(a.costs.promotionFees).toBe(0)
+    expect(a.costs.sellerBonuses).toBe(0)
+    expect(a.costs.otherFees).toBe(0)
+    expect(a.costs.netShipping).toBe(-3) // 5 subsidy - 8 cost
+    // Alias reconciles to the old lump; net reconciles to raw adjustments.
+    expect(a.costs.platformFees).toBe(a.costs.shippingCosts + a.costs.promotionFees + a.costs.otherFees)
+    expect(a.costs.adjustmentsNet).toBe(a.totals.adjustments)
   })
 
   it('perDay.products reconciles to each day gross', () => {
@@ -445,5 +457,178 @@ describe('Sales Dashboard redesign analytics', () => {
     const jun20 = a.perDay.find((d) => d.day === '2026-06-20')
     expect(jun20.gross).toBe(330) // 50 + 200 + 80
     expect(jun20.products.find((p) => p.productLabel === 'Panini Signature').revenue).toBe(200)
+  })
+
+  it('exposes transactionMix (raw ledger vocabulary) matching totals', () => {
+    const by = Object.fromEntries(a.transactionMix.map((t) => [t.type, t]))
+    expect(by.earning.count).toBe(a.totals.earningCount)
+    expect(by.earning.amount).toBe(a.totals.grossEarnings)
+    expect(by.giveaway.amount).toBe(a.totals.giveawayLost)
+    expect(by.adjustment.amount).toBe(a.totals.adjustments)
+    expect(by.tip.amount).toBe(a.totals.tips)
+    expect(by.other.count).toBe(0)
+  })
+
+  it('profit with zero inputs == ledger net (revenue + adjustments)', () => {
+    // No manual costs → initial == full == netRevenue + adjustmentsNet.
+    const expected = Math.round((a.totals.netRevenue + a.costs.adjustmentsNet) * 100) / 100
+    expect(a.profit.initialProfit).toBe(expected)
+    expect(a.profit.fullProfit).toBe(a.profit.initialProfit)
+    expect(a.profit.grossSales).toBe(400)
+  })
+})
+
+// =============================================================================
+// ADJUSTMENT SPLIT — a fixture with all four adjustment families + a positive
+// "Show Boost" (must stay income, not a fee). Fully SYNTHETIC.
+// =============================================================================
+const SPLIT_HEADER = '"Created Date","Amount","Listing ID","Order ID","Message","Status","Transaction Type","Completed Date"'
+const SPLIT_ROWS = [
+  '"Jun 20, 2026, 1:00:00 PM","$100.00","1","1","Earnings for selling a 1x Topps Chrome Break #1 - Bears","completed","SALES","Jun 20, 2026, 1:00:01 PM"',
+  '"Jun 20, 2026, 2:00:00 PM","$5.00","2","2","Shipping Subsidy","completed","ADJUSTMENT","Jun 20, 2026, 2:00:01 PM"',
+  '"Jun 20, 2026, 3:00:00 PM","-$8.00","3","3","Whatnot platform charge for shipping adjustment","completed","ADJUSTMENT","Jun 20, 2026, 3:00:01 PM"',
+  '"Jun 20, 2026, 4:00:00 PM","-$3.00","4","4","Seller purchased Show Boost for FRIDAY NIGHT","completed","ADJUSTMENT","Jun 20, 2026, 4:00:01 PM"',
+  '"Jun 20, 2026, 5:00:00 PM","$2.00","5","5","Super Seller Bonus","completed","ADJUSTMENT","Jun 20, 2026, 5:00:01 PM"',
+  // A POSITIVE "Show Boost" — the amt<0 guard keeps this out of promotionFees.
+  '"Jun 20, 2026, 6:00:00 PM","$3.00","6","6","Show Boost refund","completed","ADJUSTMENT","Jun 20, 2026, 6:00:01 PM"',
+]
+const SPLIT_CSV = '﻿' + [SPLIT_HEADER, ...SPLIT_ROWS].join('\n') + '\n'
+
+describe('adjustment split into named buckets', () => {
+  const { rows } = parseLedgerRows(SPLIT_CSV)
+  const a = analyzeLedger(rows, {})
+
+  it('routes each adjustment to the right bucket by message + sign', () => {
+    expect(a.costs.shippingSubsidies).toBe(5)
+    expect(a.costs.shippingCosts).toBe(-8)
+    expect(a.costs.promotionFees).toBe(-3)
+    expect(a.costs.sellerBonuses).toBe(2)
+    expect(a.costs.otherFees).toBe(0)
+    // The positive "Show Boost refund" (+3) is income, NOT a promotion fee.
+    expect(a.costs.otherAdjustments).toBe(3)
+  })
+
+  it('alias + net reconcile', () => {
+    expect(a.costs.platformFees).toBe(-11) // shippingCosts(-8) + promotionFees(-3)
+    expect(a.costs.adjustmentsNet).toBe(a.totals.adjustments) // -1
+    expect(a.costs.adjustmentsNet).toBe(-1) // 5 -8 -3 +2 +3
+    expect(a.costs.netShipping).toBe(-3)
+  })
+})
+
+// =============================================================================
+// PROFIT + COST INPUTS — manual COGS/shipping/supplies/labor/hours/cancellations.
+// Fully SYNTHETIC.
+// =============================================================================
+const PROFIT_HEADER = '"Created Date","Amount","Listing ID","Order ID","Message","Status","Transaction Type","Completed Date"'
+const PROFIT_ROWS = [
+  '"Jun 20, 2026, 1:00:00 PM","$500.00","1","1","Earnings for selling a 1x Topps Chrome Break #1 - Bears","completed","SALES","Jun 20, 2026, 1:00:01 PM"',
+  '"Jun 20, 2026, 2:00:00 PM","-$4.00","2","2","Charged deduction of $4.00 for giveaway order 10","completed","SALES","Jun 20, 2026, 2:00:01 PM"',
+  '"Jun 20, 2026, 3:00:00 PM","-$2.00","3","3","Charged deduction of $2.00 for giveaway order 11","completed","SALES","Jun 20, 2026, 3:00:01 PM"',
+]
+const PROFIT_CSV = '﻿' + [PROFIT_HEADER, ...PROFIT_ROWS].join('\n') + '\n'
+
+describe('profit model with manual cost inputs', () => {
+  const { rows } = parseLedgerRows(PROFIT_CSV)
+  // gross 500, giveawayLost -6, no adjustments -> ledgerNet 494. giveawayCount 2.
+
+  it('applies per-unit COGS/shipping, supplies, and labor (direct + hours)', () => {
+    const a = analyzeLedger(rows, { costInputs: {
+      giveawayCogsPerUnit: 2, giveawayShipPerUnit: 1, suppliesTotal: 10,
+      laborDirect: 20, laborHourlyRate: 5, hoursLog: [{ hours: 4 }],
+    } })
+    expect(a.profit.costs.giveawayCogs).toBe(4)      // 2 x 2 giveaways
+    expect(a.profit.costs.giveawayShipping).toBe(2)  // 1 x 2
+    expect(a.profit.costs.labor).toBe(40)            // 20 + 5*4
+    expect(a.profit.hours.total).toBe(4)
+    expect(a.profit.hours.revenuePerHour).toBe(125)  // 500 / 4
+    // ledgerNet 494 - cogs 4 - ship 2 - cancel 0 = 488 initial; - supplies 10 - labor 40 = 438 full
+    expect(a.profit.initialProfit).toBe(488)
+    expect(a.profit.fullProfit).toBe(438)
+  })
+
+  it('a flat total overrides the per-unit rate', () => {
+    const a = analyzeLedger(rows, { costInputs: { giveawayCogsPerUnit: 2, giveawayCogsTotal: 100 } })
+    expect(a.profit.costs.giveawayCogs).toBe(100)
+  })
+})
+
+// =============================================================================
+// CANCELLATIONS — best-effort refund detection + manual override.
+// =============================================================================
+const CANCEL_HEADER = '"Created Date","Amount","Listing ID","Order ID","Message","Status","Transaction Type","Completed Date"'
+const CANCEL_ROWS = [
+  '"Jun 20, 2026, 1:00:00 PM","$100.00","1","1","Earnings for selling a 1x Topps Chrome Break #1 - Bears","completed","SALES","Jun 20, 2026, 1:00:01 PM"',
+  // A refund SALES row (not an earning, not a giveaway) -> auto-detected cancellation.
+  '"Jun 20, 2026, 2:00:00 PM","-$5.00","2","2","Refund for order 123","completed","SALES","Jun 20, 2026, 2:00:01 PM"',
+]
+const CANCEL_CSV = '﻿' + [CANCEL_HEADER, ...CANCEL_ROWS].join('\n') + '\n'
+
+describe('cancellations', () => {
+  const { rows } = parseLedgerRows(CANCEL_CSV)
+
+  it('auto-detects a refund SALES row and subtracts it from profit', () => {
+    const a = analyzeLedger(rows, {})
+    expect(a.totals.refundCount).toBe(1)
+    expect(a.totals.otherCount).toBe(0) // a recognized refund is NOT "unclassified"
+    expect(a.profit.cancellationsDetail.count).toBe(1)
+    expect(a.profit.cancellationsDetail.auto).toBe(5)
+    expect(a.profit.costs.cancellations).toBe(5)
+    expect(a.profit.cancellationsDetail.source).toBe('auto')
+    // gross 100, no giveaway/adjustments -> ledgerNet 100; -5 cancellation = 95.
+    expect(a.profit.initialProfit).toBe(95)
+  })
+
+  it('an override replaces the auto amount', () => {
+    const a = analyzeLedger(rows, { costInputs: { cancellationsOverride: 20 } })
+    expect(a.profit.costs.cancellations).toBe(20)
+    expect(a.profit.cancellationsDetail.source).toBe('override')
+    expect(a.profit.initialProfit).toBe(80)
+  })
+
+  it('base fixtures with no refunds report zero cancellations', () => {
+    const { rows: r2 } = parseLedgerRows(REDESIGN_CSV)
+    const a = analyzeLedger(r2, {})
+    expect(a.profit.costs.cancellations).toBe(0)
+  })
+})
+
+describe('productFamily — hardened, empty-safe', () => {
+  const { productFamily, simplifyProduct } = _internal
+
+  it('matches simplifyProduct on the labeled fixtures (no label regression)', () => {
+    expect(productFamily('COSMIC CHROME FOOTBALL HOBBY BOX- CHASE PLANETARY PURSUIT')).toBe('Cosmic Chrome')
+    expect(productFamily('TIER ONE BASEBALL - NEW RELEASE!!')).toBe('Tier One')
+  })
+
+  it('never returns empty for a sport-word-leading product', () => {
+    // simplifyProduct cuts at the leading sport word and returns '' — the empty
+    // label bug productFamily now fixes.
+    expect(productFamily('1x BASEBALL MEGA BREAK #3 - Reds')).toBe('Baseball Mega')
+    expect(productFamily('BASEBALL')).not.toBe('')
+    expect(productFamily('2025')).toBe('Other') // bare year -> no significant token
+  })
+
+  it("'full' grouping keys revenueByProduct by the exact product string", () => {
+    const { rows } = parseLedgerRows(REDESIGN_CSV)
+    const fam = analyzeLedger(rows, {})
+    const full = analyzeLedger(rows, { costInputs: { productGrouping: 'full' } })
+    const round2 = (arr) => Math.round(arr.reduce((s, x) => s + x.revenue, 0) * 100) / 100
+    expect(round2(full.revenueByProduct)).toBe(400) // still sums to gross
+    // Full grouping has at least as many distinct products as family grouping.
+    expect(full.revenueByProduct.length).toBeGreaterThanOrEqual(fam.revenueByProduct.length)
+    expect(full.revenueByProduct[0].product).toBeTruthy()
+  })
+})
+
+describe('back-compat — no opts still produces a full analysis', () => {
+  it('analyzeLedger(rows) returns profit with zero manual costs', () => {
+    const { rows } = parseLedgerRows(REDESIGN_CSV)
+    const a = analyzeLedger(rows)
+    expect(a.profit).toBeTruthy()
+    expect(a.profit.costs.giveawayCogs).toBe(0)
+    expect(a.profit.costs.supplies).toBe(0)
+    expect(a.profit.costs.labor).toBe(0)
+    expect(a.costInputs.productGrouping).toBe('family')
   })
 })

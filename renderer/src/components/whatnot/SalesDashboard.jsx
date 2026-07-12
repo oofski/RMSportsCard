@@ -46,12 +46,38 @@ function count(n) {
   return Number(n || 0).toLocaleString('en-US')
 }
 
-// The three dashboard tabs (id ↔ visible label).
+// The dashboard tabs (id ↔ visible label).
 const TABS = [
   ['overview', 'Overview'],
+  ['profit', 'Profit'],
   ['byday', 'Revenue by day'],
   ['breaks', 'Team breaks'],
 ]
+
+/** Format a percent number as e.g. 65 → "65%". */
+function pct(n) {
+  return Number(n || 0).toFixed(0) + '%'
+}
+
+// "2026-06-28" → "Jun 28" (renderer-side twin of ledger.cjs formatDayLabel).
+const MONTHS_ABBR = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+function dayLabel(k) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(k || ''))
+  return m ? `${MONTHS_ABBR[Number(m[2])] || ''} ${Number(m[3])}` : String(k || '')
+}
+
+/** Immutably sort a copy of `rows` by `key` in `dir` ('asc'|'desc'). Strings
+ *  compare via localeCompare; everything else numerically. */
+function sortRows(rows, key, dir) {
+  const sign = dir === 'asc' ? 1 : -1
+  return rows.slice().sort((a, b) => {
+    const av = a[key], bv = b[key]
+    if (typeof av === 'string' || typeof bv === 'string') {
+      return String(av ?? '').localeCompare(String(bv ?? '')) * sign
+    }
+    return ((Number(av) || 0) - (Number(bv) || 0)) * sign
+  })
+}
 
 export default function SalesDashboard({ currentUser, initialData }) {
   // ---- Component state ------------------------------------------------------
@@ -66,8 +92,11 @@ export default function SalesDashboard({ currentUser, initialData }) {
   const [dragging, setDragging] = useState(false) // dropzone hover highlight
   // Which "Revenue by Day" rows are expanded to show their per-break breakdown.
   const [expandedDays, setExpandedDays] = useState(() => new Set())
-  // Active dashboard tab: 'overview' | 'byday' | 'breaks'.
+  // Active dashboard tab: 'overview' | 'profit' | 'byday' | 'breaks'.
   const [tab, setTab] = useState('overview')
+  // Team-breaks tab: sortable columns + a product filter box.
+  const [sortBreaks, setSortBreaks] = useState({ key: 'revenue', dir: 'desc' })
+  const [breakQuery, setBreakQuery] = useState('')
 
   // Hidden <input type=file> used by the visible "Choose CSV…" / "Replace CSV"
   // buttons. `alive` guards setState after unmount (tab switched mid-request).
@@ -215,8 +244,20 @@ export default function SalesDashboard({ currentUser, initialData }) {
     warnings = [],
     revenueByProduct = [],
     saleTypeMix = [],
+    transactionMix = [],
+    profit = {},
+    costInputs = {},
     costs = {},
   } = data
+
+  // New split cost fields (present on v1.5.18+ payloads). `hasSplit` gates the
+  // richer Costs card + Profit tab so an OLD stored payload degrades gracefully.
+  const {
+    shippingCosts, promotionFees = 0, sellerBonuses = 0, otherFees = 0,
+    netShipping = 0, platformFees = 0,
+  } = costs
+  const hasSplit = shippingCosts !== undefined
+  const hasProfit = profit && profit.initialProfit !== undefined
 
   const {
     grossEarnings = 0,
@@ -234,11 +275,15 @@ export default function SalesDashboard({ currentUser, initialData }) {
   const days = perDay.slice()
   const maxNet = days.reduce((max, d) => Math.max(max, Number(d.net) || 0), 0)
 
-  // Top breaks: sort a copy by revenue desc and cap to the leading 15 rows.
-  const TOP_BREAK_LIMIT = 15
-  const sortedBreaks = perBreak.slice().sort((a, b) => (Number(b.revenue) || 0) - (Number(a.revenue) || 0))
-  const topBreaks = sortedBreaks.slice(0, TOP_BREAK_LIMIT)
-  const moreBreaks = Math.max(0, sortedBreaks.length - TOP_BREAK_LIMIT)
+  // Team-breaks tab: filter perBreak by the query (product/label), then sort by
+  // the active column. No cap — the table scrolls and is fully sortable.
+  const breakNeedle = breakQuery.trim().toLowerCase()
+  const filteredBreaks = breakNeedle
+    ? perBreak.filter((b) => `${b.productLabel || ''} ${b.product || ''}`.toLowerCase().includes(breakNeedle))
+    : perBreak
+  const sortedFilteredBreaks = sortRows(filteredBreaks, sortBreaks.key, sortBreaks.dir)
+  const toggleSort = (key) =>
+    setSortBreaks((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: 'desc' }))
 
   // ---- Per-case rollups + the live "breaks per case" control ----------------
   const {
@@ -273,8 +318,10 @@ export default function SalesDashboard({ currentUser, initialData }) {
     sub: `${count(d.count)} sales`,
   }))
   // Donut: revenue share per product (the Donut itself sorts / folds "Other").
+  // `title` carries the full product string so the legend hover shows the real name.
   const donutSlices = revenueByProduct.map((p) => ({
     label: p.productLabel,
+    title: p.product || p.productLabel,
     value: Number(p.revenue) || 0,
   }))
 
@@ -385,14 +432,19 @@ export default function SalesDashboard({ currentUser, initialData }) {
             <Donut slices={donutSlices} centerValue={grossEarnings} centerLabel="Gross" size={160} thickness={26} />
           </div>
 
-          {/* Sale-type mix (thin-bar rows) */}
+          {/* Sale category (thin-bar rows) + raw ledger composition strip. */}
           <div className="card" style={{ gridArea: 'mix', minWidth: 0 }}>
-            <div className="section-title" style={{ margin: '0 0 12px' }}>Sale-type mix</div>
+            <div className="section-title" style={{ margin: '0 0 4px' }}>Sale category</div>
+            <div className="muted small" style={{ marginBottom: 10 }}>
+              Gross earnings grouped by how the item sold (classified from the product text).
+            </div>
             {saleTypeMix.length === 0 && <div className="muted small">No sales recorded.</div>}
             {saleTypeMix.map((t) => {
               // Scale to the biggest type; clamp 0–100 so a zero max or a
-              // negative revenue never produces an invalid width.
-              const pct = maxTypeRev > 0
+              // negative revenue never produces an invalid width. NB: named
+              // `barPct` (NOT `pct`) so it doesn't shadow the module-level pct()
+              // formatter used just below for the percent-of-gross column.
+              const barPct = maxTypeRev > 0
                 ? Math.min(100, Math.max(0, ((Number(t.revenue) || 0) / maxTypeRev) * 100))
                 : 0
               return (
@@ -405,24 +457,59 @@ export default function SalesDashboard({ currentUser, initialData }) {
                     {t.label}
                   </span>
                   <div className="bar" style={{ flex: 1, minWidth: 24 }}>
-                    <span style={{ width: pct + '%' }} />
+                    <span style={{ width: barPct + '%' }} />
                   </div>
                   <span className="mono small nowrap" style={{ width: 84, textAlign: 'right' }}>{money(t.revenue)}</span>
-                  <span className="muted small nowrap" style={{ width: 38, textAlign: 'right' }}>{count(t.pctOfGross)}%</span>
+                  <span className="muted small nowrap" style={{ width: 38, textAlign: 'right' }}>{pct(t.pctOfGross)}</span>
                   <span className="muted small nowrap" style={{ width: 48, textAlign: 'right' }}>({count(t.count)})</span>
                 </div>
               )
             })}
+
+            {/* Ledger composition: the RAW transaction vocabulary (what the file
+                actually contained), distinct from the derived category mix above. */}
+            {transactionMix.length > 0 && (
+              <>
+                <div className="muted small" style={{ fontWeight: 600, margin: '12px 0 4px' }}>Ledger composition</div>
+                {transactionMix.map((tx) => (
+                  <div key={tx.type} className="row-between" style={{ padding: '3px 0' }}>
+                    <span className="muted small">{tx.label} <span className="mono">({count(tx.count)})</span></span>
+                    <span className="mono small">{money(tx.amount)}</span>
+                  </div>
+                ))}
+              </>
+            )}
           </div>
 
-          {/* Costs & extras (stacked label/value rows) */}
+          {/* Costs & extras — the ADJUSTMENT bucket split into named income/cost
+              lines. Falls back to the single legacy "Platform fees" row on an
+              old payload (hasSplit === false). */}
           <div className="card" style={{ gridArea: 'costs', minWidth: 0 }}>
             <div className="section-title" style={{ margin: '0 0 12px' }}>Costs &amp; extras</div>
-            {costRow('Given away', costs.giveaways, 'var(--bad)')}
-            {costRow('Shipping subsidies', costs.shippingSubsidies, 'var(--good)')}
-            {costRow('Platform fees', costs.platformFees, 'var(--bad)')}
-            {costRow('Tips', costs.tips)}
-            {costRow('Net adjustments', costs.adjustmentsNet)}
+            {hasSplit ? (
+              <>
+                <div className="muted small" style={{ fontWeight: 600, marginBottom: 2 }}>Income</div>
+                {costRow('Shipping subsidies', costs.shippingSubsidies, 'var(--good)')}
+                {sellerBonuses !== 0 && costRow('Seller bonuses', sellerBonuses, 'var(--good)')}
+                <div className="muted small" style={{ fontWeight: 600, margin: '8px 0 2px' }}>Costs</div>
+                {costRow('Shipping costs', shippingCosts, 'var(--bad)')}
+                {costRow('Promotion fees (boosts)', promotionFees, 'var(--bad)')}
+                {costRow('Given away', costs.giveaways, 'var(--bad)')}
+                {otherFees !== 0 && costRow('Other fees', otherFees, 'var(--bad)')}
+                <div style={{ marginTop: 6 }} />
+                {costRow('Net shipping', netShipping, netShipping < 0 ? 'var(--bad)' : 'var(--good)')}
+                {costRow('Tips', costs.tips)}
+                {costRow('Net adjustments', costs.adjustmentsNet)}
+              </>
+            ) : (
+              <>
+                {costRow('Given away', costs.giveaways, 'var(--bad)')}
+                {costRow('Shipping subsidies', costs.shippingSubsidies, 'var(--good)')}
+                {costRow('Platform fees', platformFees, 'var(--bad)')}
+                {costRow('Tips', costs.tips)}
+                {costRow('Net adjustments', costs.adjustmentsNet)}
+              </>
+            )}
             <div className="muted small" style={{ marginTop: 10 }}>
               Payouts ignored ({count(payoutsIgnoredCount)}) · excluded from net revenue
             </div>
@@ -483,7 +570,7 @@ export default function SalesDashboard({ currentUser, initialData }) {
                           className="row"
                           style={{ gap: 12, padding: '3px 0' }}
                         >
-                          <span className="small nowrap" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          <span className="small nowrap" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} title={entry.product || entry.productLabel}>
                             {entry.productLabel}
                           </span>
                           <span className="mono small nowrap" style={{ width: 100, textAlign: 'right' }}>
@@ -542,33 +629,107 @@ export default function SalesDashboard({ currentUser, initialData }) {
               <div className="value">{money(avgRevenuePerCase)}</div>
             </div>
           </div>
-          <table className="grid" style={{ marginTop: 14 }}>
+          <div className="muted small" style={{ marginTop: 8 }}>
+            A break = one “Break #N” of a product on a given day. Cases = breaks ÷ breaks-per-case.
+          </div>
+
+          {/* Per-product / per-case rollup */}
+          <div className="section-title">By product / case</div>
+          <table className="grid">
             <thead>
               <tr>
-                <th>Break</th>
+                <th>Product</th>
+                <th style={{ textAlign: 'right' }}>Breaks</th>
+                <th style={{ textAlign: 'right' }}>Cases</th>
                 <th style={{ textAlign: 'right' }}>Revenue</th>
-                <th style={{ textAlign: 'right' }}>Sales</th>
+                <th style={{ textAlign: 'right' }}>Avg / break</th>
+                <th style={{ textAlign: 'right' }}>Avg / case</th>
               </tr>
             </thead>
             <tbody>
-              {topBreaks.length === 0 && (
-                <tr><td colSpan={3} className="muted">No team breaks recorded.</td></tr>
+              {byProduct.length === 0 && (
+                <tr><td colSpan={6} className="muted">No team breaks recorded.</td></tr>
               )}
-              {topBreaks.map((b, i) => (
+              {byProduct.map((p, i) => (
+                <tr key={`${p.productLabel || p.product || i}`}>
+                  <td title={p.product}>{p.productLabel || p.product || '—'}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{count(p.breaks)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{count(p.cases)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{money(p.revenue)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{money(p.breaks ? p.revenue / p.breaks : 0)}</td>
+                  <td className="mono" style={{ textAlign: 'right' }}>{money(p.cases ? p.revenue / p.cases : 0)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Every break — sortable columns + a product filter (no cap). */}
+          <div className="row-between" style={{ marginTop: 20, alignItems: 'center' }}>
+            <div className="section-title" style={{ margin: 0 }}>Breaks ({count(sortedFilteredBreaks.length)})</div>
+            <input
+              className="input"
+              style={{ width: 220 }}
+              type="search"
+              placeholder="Filter by product…"
+              value={breakQuery}
+              onChange={(e) => setBreakQuery(e.target.value)}
+            />
+          </div>
+          <table className="grid" style={{ marginTop: 8 }}>
+            <thead>
+              <tr>
+                {[['breakNumber', 'Break #', 'left'], ['productLabel', 'Product', 'left'], ['day', 'Date', 'left'], ['revenue', 'Revenue', 'right'], ['count', 'Sales', 'right']].map(([key, label, align]) => (
+                  <th
+                    key={key}
+                    style={{ textAlign: align, cursor: 'pointer', userSelect: 'none' }}
+                    onClick={() => toggleSort(key)}
+                    title="Sort"
+                  >
+                    {label}{sortBreaks.key === key ? (sortBreaks.dir === 'asc' ? ' ▲' : ' ▼') : ''}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sortedFilteredBreaks.length === 0 && (
+                <tr><td colSpan={5} className="muted">No breaks match.</td></tr>
+              )}
+              {sortedFilteredBreaks.map((b, i) => (
                 <tr key={`${b.day || ''}-${b.product || ''}-${b.breakNumber ?? i}`}>
-                  <td>{b.label || b.product || '—'}</td>
+                  <td className="mono">#{b.breakNumber}</td>
+                  <td title={b.product}>{b.productLabel || b.product || '—'}</td>
+                  <td className="mono">{dayLabel(b.day)}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{money(b.revenue)}</td>
                   <td className="mono" style={{ textAlign: 'right' }}>{count(b.count)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {moreBreaks > 0 && (
-            <div className="muted small" style={{ paddingTop: 10 }}>
-              + {count(moreBreaks)} more break{moreBreaks === 1 ? '' : 's'} not shown.
-            </div>
-          )}
         </div>
+      )}
+
+      {/* ===================== PROFIT TAB ===================== */}
+      {tab === 'profit' && (
+        <ProfitTab
+          profit={profit}
+          costInputs={costInputs}
+          hasProfit={hasProfit}
+          busy={busy}
+          resetKey={`${filename || ''}|${uploadedAt || ''}`}
+          onCommit={async (patch) => {
+            setBusy(true)
+            setError(null)
+            try {
+              const result = await api.setLedgerCostInputs(patch)
+              if (!aliveRef.current) return
+              setData(result)
+            } catch (e) {
+              if (aliveRef.current) setError(e.message)
+            } finally {
+              if (aliveRef.current) setBusy(false)
+            }
+          }}
+        />
       )}
 
       {/* ---- 5. Warnings (collapsible, always last) -------------------------- */}
@@ -627,6 +788,215 @@ function BreaksPerCaseControl({ value, busy, onCommit }) {
         onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
         style={{ width: 90 }}
       />
+    </div>
+  )
+}
+
+// =============================================================================
+// ProfitTab
+// -----------------------------------------------------------------------------
+// Left: editable manual cost inputs (giveaway COGS/shipping, supplies, labor +
+// an hours log, cancellations override) that persist and recompute the whole
+// analysis. Right: a transparent P&L waterfall from Gross sales down to Full
+// profit, plus headline profit/margin tiles — everything computed by the backend
+// so the numbers always reconcile. Commits are debounced to blur (a field) or
+// an explicit hours-log add/remove; the draft re-syncs when the server value
+// changes (mirrors BreaksPerCaseControl).
+// =============================================================================
+function draftFromCostInputs(ci) {
+  // Zero and null both render as an empty field (a cost of 0 == "not entered").
+  const s = (v) => (v == null || Number(v) === 0 ? '' : String(v))
+  const c = ci || {}
+  return {
+    giveawayCogsPerUnit: s(c.giveawayCogsPerUnit), giveawayCogsTotal: s(c.giveawayCogsTotal),
+    giveawayShipPerUnit: s(c.giveawayShipPerUnit), giveawayShipTotal: s(c.giveawayShipTotal),
+    suppliesTotal: s(c.suppliesTotal), laborDirect: s(c.laborDirect), laborHourlyRate: s(c.laborHourlyRate),
+    cancellationsOverride: s(c.cancellationsOverride),
+    hoursLog: Array.isArray(c.hoursLog) ? c.hoursLog.map((h) => ({ id: h.id, date: h.date || '', hours: s(h.hours), note: h.note || '' })) : [],
+  }
+}
+
+function ProfitTab({ profit, costInputs, hasProfit, busy, onCommit, resetKey }) {
+  const [draft, setDraft] = useState(() => draftFromCostInputs(costInputs))
+  const idRef = useRef(1)
+  // Re-seed the form ONLY when the ledger itself changes (a fresh upload/clear),
+  // not on every cost commit — otherwise the server echo would clobber an edit
+  // in progress in another field. During editing the local draft is authoritative;
+  // the live P&L on the right always reflects the freshly recomputed `profit`.
+  useEffect(() => { setDraft(draftFromCostInputs(costInputs)) }, [resetKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (!hasProfit) {
+    return (
+      <div className="card">
+        <div className="section-title" style={{ margin: 0 }}>Profit</div>
+        <div className="muted" style={{ marginTop: 8 }}>
+          Profit analysis is available after re-uploading your ledger. Use “Replace CSV” above to enable it.
+        </div>
+      </div>
+    )
+  }
+
+  const setField = (k, v) => setDraft((d) => ({ ...d, [k]: v }))
+  // Commit one scalar field (blank total → null via the backend normalizer).
+  const commitField = (k) => onCommit({ [k]: draft[k] === '' ? null : draft[k] })
+
+  // Hours-log editing. Add/remove commit immediately; per-cell edits commit on blur.
+  const commitHours = (log) => onCommit({ hoursLog: log.map((h) => ({ id: h.id, date: h.date, hours: h.hours === '' ? 0 : h.hours, note: h.note })) })
+  const addHours = () => {
+    const log = [...draft.hoursLog, { id: `h${idRef.current++}_${draft.hoursLog.length}`, date: '', hours: '', note: '' }]
+    setDraft((d) => ({ ...d, hoursLog: log }))
+    commitHours(log)
+  }
+  const removeHours = (i) => {
+    const log = draft.hoursLog.filter((_, idx) => idx !== i)
+    setDraft((d) => ({ ...d, hoursLog: log }))
+    commitHours(log)
+  }
+  const setHoursCell = (i, k, v) => setDraft((d) => {
+    const log = d.hoursLog.map((h, idx) => (idx === i ? { ...h, [k]: v } : h))
+    return { ...d, hoursLog: log }
+  })
+
+  const c = profit.costs || {}
+  const inc = profit.income || {}
+  const lab = profit.labor || {}
+  const hrs = profit.hours || {}
+
+  // A number input bound to draft[key], committing on blur.
+  const numInput = (key, placeholder) => (
+    <input
+      className="input" type="number" min={0} step="0.01" placeholder={placeholder}
+      value={draft[key]} disabled={busy}
+      onChange={(e) => setField(key, e.target.value)}
+      onBlur={() => commitField(key)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur() }}
+      style={{ width: 110 }}
+    />
+  )
+  // One P&L waterfall row. kind: 'income' (+green) | 'cost' (−red) | 'subtotal' (bold).
+  const pnl = (label, value, kind) => {
+    const v = Number(value || 0)
+    const color = kind === 'income' ? 'var(--good)' : kind === 'cost' ? 'var(--bad)' : undefined
+    const text = kind === 'cost' ? `−${money(v)}` : kind === 'income' ? `+${money(v)}` : money(v)
+    return (
+      <div className="row-between" style={{ padding: '6px 0', borderBottom: kind === 'subtotal' ? '2px solid var(--line)' : '1px solid var(--line)' }}>
+        <span className={kind === 'subtotal' ? '' : 'muted small'} style={kind === 'subtotal' ? { fontWeight: 700 } : undefined}>{label}</span>
+        <span className="mono small" style={{ color, fontWeight: kind === 'subtotal' ? 700 : undefined }}>{text}</span>
+      </div>
+    )
+  }
+
+  const field = (label, node, hint) => (
+    <div className="col" style={{ gap: 4, minWidth: 0 }}>
+      <label className="muted small">{label}</label>
+      {node}
+      {hint && <span className="muted small">{hint}</span>}
+    </div>
+  )
+
+  const profitColor = (n) => (Number(n) >= 0 ? 'var(--good)' : 'var(--bad)')
+
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+      {/* ---------------- LEFT: editable cost inputs ---------------- */}
+      <div className="card">
+        <div className="section-title" style={{ margin: '0 0 4px' }}>Your costs</div>
+        <div className="muted small" style={{ marginBottom: 12 }}>
+          Enter the costs the ledger can’t know. Everything recomputes live. Blank uses $0 (or the per-unit rate).
+        </div>
+
+        <div className="col" style={{ gap: 14 }}>
+          {field('Giveaway COGS — per giveaway',
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>{numInput('giveawayCogsPerUnit', '0.00')}<span className="muted small">× {count(profit.giveawayCount)} giveaways</span></div>,
+            'or set a flat total below (overrides the rate)')}
+          {field('Giveaway COGS — flat total', numInput('giveawayCogsTotal', 'optional'))}
+
+          {field('Giveaway shipping — per giveaway',
+            <div className="row" style={{ gap: 8, alignItems: 'center' }}>{numInput('giveawayShipPerUnit', '0.00')}<span className="muted small">× {count(profit.giveawayCount)} giveaways</span></div>,
+            'or a flat total below')}
+          {field('Giveaway shipping — flat total', numInput('giveawayShipTotal', 'optional'))}
+
+          {field('Supplies (bags, toploaders, tape…)', numInput('suppliesTotal', '0.00'))}
+
+          {field('Labor — flat amount', numInput('laborDirect', '0.00'))}
+          {field('Labor — hourly rate', numInput('laborHourlyRate', '0.00'), `× ${hrs.total || 0} logged hours = ${money(lab.hourlyCost)}`)}
+
+          {/* Hours log */}
+          <div className="col" style={{ gap: 6 }}>
+            <div className="row-between">
+              <label className="muted small">Hours worked</label>
+              <button className="btn btn-sm" onClick={addHours} disabled={busy}>+ Add hours</button>
+            </div>
+            {draft.hoursLog.length === 0 && <span className="muted small">No hours logged yet.</span>}
+            {draft.hoursLog.map((h, i) => (
+              <div key={h.id || i} className="row" style={{ gap: 6, alignItems: 'center' }}>
+                <input className="input" type="date" value={h.date} disabled={busy}
+                  onChange={(e) => setHoursCell(i, 'date', e.target.value)} onBlur={() => commitHours(draft.hoursLog)} style={{ width: 140 }} />
+                <input className="input" type="number" min={0} step="0.25" placeholder="hrs" value={h.hours} disabled={busy}
+                  onChange={(e) => setHoursCell(i, 'hours', e.target.value)} onBlur={() => commitHours(draft.hoursLog)} style={{ width: 70 }} />
+                <input className="input" placeholder="note" value={h.note} disabled={busy}
+                  onChange={(e) => setHoursCell(i, 'note', e.target.value)} onBlur={() => commitHours(draft.hoursLog)} style={{ flex: 1, minWidth: 60 }} />
+                <button className="btn btn-sm btn-danger" onClick={() => removeHours(i)} disabled={busy} aria-label="Remove">✕</button>
+              </div>
+            ))}
+            {hrs.total > 0 && (
+              <div className="muted small">
+                {hrs.total} hrs · {money(hrs.revenuePerHour)}/hr revenue · {money(hrs.profitPerHour)}/hr profit
+              </div>
+            )}
+          </div>
+
+          {field('Cancellations / refunds (override)', numInput('cancellationsOverride', 'auto'),
+            profit.cancellationsDetail && profit.cancellationsDetail.count > 0
+              ? `${count(profit.cancellationsDetail.count)} refund row(s) auto-detected (${money(profit.cancellationsDetail.auto)})`
+              : 'auto-detected from refund rows (none found in this ledger)')}
+        </div>
+      </div>
+
+      {/* ---------------- RIGHT: P&L + headline tiles ---------------- */}
+      <div className="col" style={{ gap: 16 }}>
+        <div className="stat-grid">
+          <div className="stat">
+            <div className="label">Initial profit</div>
+            <div className="value" style={{ color: profitColor(profit.initialProfit) }}>{money(profit.initialProfit)}</div>
+          </div>
+          <div className="stat">
+            <div className="label">Full profit</div>
+            <div className="value" style={{ color: profitColor(profit.fullProfit) }}>{money(profit.fullProfit)}</div>
+          </div>
+          <div className="stat">
+            <div className="label">Margin (full)</div>
+            <div className="value">{pct(profit.fullMargin)}</div>
+          </div>
+          <div className="stat">
+            <div className="label">Gross / break</div>
+            <div className="value">{money(profit.grossSalesPerBreak)}</div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="section-title" style={{ margin: '0 0 8px' }}>Profit &amp; loss</div>
+          {pnl('Gross sales', inc.grossEarnings, 'income')}
+          {Number(c.giveawayCharge) !== 0 && pnl('Giveaways (Whatnot deduction)', c.giveawayCharge, 'cost')}
+          {Number(inc.shippingSubsidies) !== 0 && pnl('Shipping subsidies', inc.shippingSubsidies, 'income')}
+          {Number(c.shippingCosts) !== 0 && pnl('Shipping costs', c.shippingCosts, 'cost')}
+          {Number(c.promotionFees) !== 0 && pnl('Promotion fees (boosts)', c.promotionFees, 'cost')}
+          {Number(inc.sellerBonuses) !== 0 && pnl('Seller bonuses', inc.sellerBonuses, 'income')}
+          {Number(c.otherFees) !== 0 && pnl('Other fees', c.otherFees, 'cost')}
+          {Number(inc.otherAdjustments) !== 0 && pnl('Other adjustments', inc.otherAdjustments, 'income')}
+          {pnl('Ledger net', profit.ledgerNet, 'subtotal')}
+          {pnl('Giveaway COGS', c.giveawayCogs, 'cost')}
+          {pnl('Giveaway shipping', c.giveawayShipping, 'cost')}
+          {Number(c.cancellations) !== 0 && pnl('Cancellations', c.cancellations, 'cost')}
+          {pnl('Initial profit', profit.initialProfit, 'subtotal')}
+          {pnl('Supplies', c.supplies, 'cost')}
+          {pnl('Labor', c.labor, 'cost')}
+          {pnl('Full profit', profit.fullProfit, 'subtotal')}
+          <div className="muted small" style={{ marginTop: 10 }}>
+            Initial profit is before supplies &amp; labor; full profit is after. Margins are vs. gross sales.
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

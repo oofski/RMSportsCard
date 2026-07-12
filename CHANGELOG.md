@@ -6,6 +6,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.18] - 2026-07-07
+
+### Fixed — Sales Dashboard: fees, shipping & product names now read correctly
+- **Platform fees / shipping were conflated.** Whatnot lumps several very
+  different things under one "adjustment" type; the dashboard was merging them
+  all into a single "platform fees" number. They're now split into their real
+  lines: **Shipping subsidies** (income), **Shipping costs**, **Promotion fees
+  (boosts)**, and **Seller bonuses** — so shipping and promo costs are finally
+  visible on their own, and there's a **Net shipping** read-out.
+- **Sale-type** card is relabeled **"Sale category"** with a plain-English
+  caption, and a new **"Ledger composition"** strip shows the raw ledger mix
+  (sales / giveaways / adjustments / tips / payouts) so nothing is hidden.
+- **Product names** parse more cleanly (e.g. "Inception Baseball", "Baseball
+  Mega" instead of blanks), and hovering a product anywhere shows the full name.
+- **Team breaks** tab rebuilt: a clear **By product / case** table plus a
+  **sortable, filterable** list of every break (no more 15-row cap).
+
+### Added — Profit & cost tracking
+- A new **Profit** tab with a transparent P&L: gross sales → giveaways →
+  shipping → promotion fees → **Ledger net** → your manual costs → **Initial
+  profit** → supplies & labor → **Full profit**, with margins and gross/break.
+- **Enter the costs the ledger can't know** and everything recomputes live:
+  giveaway **COGS** (per-giveaway or flat), **giveaway shipping**, **supplies**,
+  **labor** (flat and/or hourly rate), an **hours log**, and a **cancellations**
+  override (refund rows are also auto-detected). These persist with the ledger.
+
+### Kept
+- Revenue by day view is unchanged.
+
 ## [1.5.17] - 2026-07-07
 
 ### Improved — Top-sleeved cards are now clearly highlighted in Orders

@@ -107,6 +107,9 @@ export const getSales = () => request('/api/sales')
 export const uploadLedger = (filename, csv) => request('/api/ledger', { method: 'POST', body: { filename, csv } })
 export const getLedger = (breaksPerCase) => request(`/api/ledger${breaksPerCase ? `?breaksPerCase=${breaksPerCase}` : ''}`)
 export const setLedgerBreaksPerCase = (breaksPerCase) => request('/api/ledger/settings', { method: 'PATCH', body: { breaksPerCase } })
+// Persist the manual profit cost inputs (giveaway COGS/shipping, supplies,
+// labor, hours log, cancellations) — returns the recomputed analysis.
+export const setLedgerCostInputs = (costInputs) => request('/api/ledger/cost-inputs', { method: 'PATCH', body: { costInputs } })
 export const clearLedger = () => request('/api/ledger', { method: 'DELETE' })
 
 // ---- History (daily snapshots) + CSV export -------------------------------

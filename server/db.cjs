@@ -909,7 +909,7 @@ class Db {
       filename: filename || null,
       uploadedAt: now(),
       rows,
-      settings: { breaksPerCase: 9 },
+      settings: { breaksPerCase: 9, costInputs: {} },
     }
     this.store.saveNow()
     return this.getLedgerAnalysis()
@@ -926,7 +926,10 @@ class Db {
     const s = this.store.state
     if (!s.ledger) return { hasLedger: false }
     const bpc = breaksPerCase != null ? breaksPerCase : s.ledger.settings.breaksPerCase
-    const analysis = analyzeLedger(s.ledger.rows, { breaksPerCase: bpc })
+    // Manual cost inputs persist alongside breaksPerCase; older stored ledgers
+    // may not have them, so default to {} (analyzeLedger normalizes internally).
+    const costInputs = (s.ledger.settings && s.ledger.settings.costInputs) || {}
+    const analysis = analyzeLedger(s.ledger.rows, { breaksPerCase: bpc, costInputs })
     return {
       hasLedger: true,
       filename: s.ledger.filename,
@@ -947,6 +950,23 @@ class Db {
     if (!s.ledger) return { hasLedger: false }
     const clamped = Math.max(1, Math.floor(Number(n) || 9))
     s.ledger.settings.breaksPerCase = clamped
+    this.store.saveNow()
+    return this.getLedgerAnalysis()
+  }
+
+  /**
+   * Merge a patch into the persisted manual cost inputs (giveaway COGS/shipping,
+   * supplies, labor, hours log, cancellations override) and return the
+   * re-aggregated analysis. A provided hoursLog replaces the stored one wholesale.
+   * @param {object} patch
+   */
+  setLedgerCostInputs(patch) {
+    const s = this.store.state
+    if (!s.ledger) return { hasLedger: false }
+    if (!s.ledger.settings) s.ledger.settings = { breaksPerCase: 9 }
+    const cur = s.ledger.settings.costInputs || {}
+    const p = patch && typeof patch === 'object' ? patch : {}
+    s.ledger.settings.costInputs = { ...cur, ...p }
     this.store.saveNow()
     return this.getLedgerAnalysis()
   }

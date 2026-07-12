@@ -92,6 +92,23 @@ describe('ledger routes', () => {
     expect(a1.perBreak.length).toBe(2) // perBreak unaffected by breaksPerCase
   })
 
+  it('persists manual cost inputs and recomputes profit', async () => {
+    const r = await (await api('/api/ledger/cost-inputs', { method: 'PATCH', body: JSON.stringify({ costInputs: { suppliesTotal: 5, giveawayCogsPerUnit: 1 } }) })).json()
+    expect(r.profit.costs.supplies).toBe(5)
+    expect(r.costInputs.suppliesTotal).toBe(5) // echoed on the payload
+    // Persisted: a fresh GET reflects the same cost inputs + profit.
+    const g = await (await api('/api/ledger')).json()
+    expect(g.costInputs.suppliesTotal).toBe(5)
+    expect(g.profit.costs.supplies).toBe(5)
+  })
+
+  it('a costInputs-only settings PATCH does not reset breaksPerCase (NaN guard)', async () => {
+    await api('/api/ledger/settings', { method: 'PATCH', body: JSON.stringify({ breaksPerCase: 3 }) })
+    const r = await (await api('/api/ledger/settings', { method: 'PATCH', body: JSON.stringify({ costInputs: { suppliesTotal: 2 } }) })).json()
+    expect(r.perCase.breaksPerCase).toBe(3) // still 3, NOT reset to 9
+    expect(r.profit.costs.supplies).toBe(2)
+  })
+
   it('clears the ledger', async () => {
     expect((await (await api('/api/ledger', { method: 'DELETE' })).json()).hasLedger).toBe(false)
     expect((await (await api('/api/ledger')).json()).hasLedger).toBe(false)
