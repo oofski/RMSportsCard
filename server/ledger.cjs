@@ -39,18 +39,26 @@
 const AMOUNT_RE = /^\s*(-?)\s*\$?\s*([\d,]+(?:\.\d+)?)\s*$/
 
 /**
- * Parse a Whatnot money string into a Number.
+ * Parse a Whatnot money string into a Number. Handles BOTH negative styles some
+ * exports use: a leading minus ("-$36,690.75") AND accounting parentheses
+ * ("($36,690.75)"). Trailing spaces (e.g. "$64.72 ") are tolerated.
  *   "$2.45"        ->  2.45
  *   "-$36,690.75"  -> -36690.75
+ *   "($4.29)"      -> -4.29
  *   "$0.00"        ->  0
  * Throws on anything that doesn't look like a currency amount.
  * @param {string} s
  * @returns {number}
  */
 function parseAmount(s) {
-  const m = AMOUNT_RE.exec(s || '')
+  let str = String(s == null ? '' : s).trim()
+  // Accounting-style negative: "($1,234.56)" == -1234.56.
+  let paren = false
+  const pm = /^\((.*)\)$/.exec(str)
+  if (pm) { paren = true; str = pm[1].trim() }
+  const m = AMOUNT_RE.exec(str)
   if (!m) throw new Error(`unparseable amount: ${JSON.stringify(s)}`)
-  const sign = m[1] === '-' ? -1 : 1
+  const sign = (paren || m[1] === '-') ? -1 : 1
   return sign * Number(m[2].replace(/,/g, ''))
 }
 
@@ -381,8 +389,15 @@ function parseLedgerRows(csvText) {
   start += 1 // consume the header row
 
   for (let r = start; r < grid.length; r++) {
-    const raw = grid[r]
+    let raw = grid[r]
     if (!raw || raw.every((c) => c === '')) continue // blank line
+    // Some Whatnot exports append spurious trailing commas (extra EMPTY columns),
+    // e.g. an 8-column ledger arriving as 11. Drop trailing empty fields down to
+    // the 8 expected columns so Transaction Type / Completed Date aren't read
+    // from an empty column (which would classify every row as "other"). A row
+    // that is genuinely malformed by unescaped quotes has NON-empty trailing
+    // fields, so this never touches the real repair case below.
+    while (raw.length > EXPECTED_COLS && raw[raw.length - 1] === '') raw = raw.slice(0, -1)
     // Skip a row that exactly equals the header (defensive against repeats).
     if (raw.length === HEADER.length && raw.every((c, idx) => c === HEADER[idx])) continue
 

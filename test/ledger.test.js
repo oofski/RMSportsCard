@@ -94,6 +94,55 @@ describe('parseLedgerRows', () => {
   })
 })
 
+// =============================================================================
+// EXPORT-FORMAT VARIANTS — a newer Whatnot ledger export writes negatives in
+// accounting parentheses "($4.29)" AND appends spurious trailing empty columns
+// (8 columns arriving as 11). The parser must handle both, or every row lands in
+// "other" with $0 amounts (a silently-empty dashboard). Fully SYNTHETIC.
+// =============================================================================
+const TRAILING_HEADER = 'Created Date,Amount,Listing ID,Order ID,Message,Status,Transaction Type,Completed Date,,,'
+const TRAILING_ROWS = [
+  '"Jun 20, 2026, 1:00:00 PM","$50.00 ",,,Earnings for selling a 1x Topps Chrome Break #1 - Bears,completed,SALES,"Jun 20, 2026, 1:00:01 PM",,,',
+  '"Jun 20, 2026, 2:00:00 PM","($4.29)",,,Charged deduction of $4.29 for giveaway order 5,completed,SALES,"Jun 20, 2026, 2:00:01 PM",,,',
+  '"Jun 29, 2026, 3:00:00 PM","($1,234.56)",,,Payout request: STRIPE acct_x,completed,PAYOUT,"Jun 29, 2026, 3:00:01 PM",,,',
+  '"Jun 20, 2026, 4:00:00 PM","$2.45 ",,,Shipping Subsidy,completed,ADJUSTMENT,"Jun 20, 2026, 4:00:01 PM",,,',
+]
+const TRAILING_CSV = '﻿' + [TRAILING_HEADER, ...TRAILING_ROWS].join('\n') + '\n'
+
+describe('parseAmount — negative styles', () => {
+  const { parseAmount } = _internal
+  it('handles leading minus AND accounting parentheses AND trailing spaces', () => {
+    expect(parseAmount('-$36,690.75')).toBe(-36690.75)
+    expect(parseAmount('($36,690.75)')).toBe(-36690.75)
+    expect(parseAmount('($4.29)')).toBe(-4.29)
+    expect(parseAmount('$64.72 ')).toBe(64.72)
+    expect(parseAmount('$0.00')).toBe(0)
+  })
+})
+
+describe('export with trailing empty columns + parenthesized negatives', () => {
+  const { rows, warnings } = parseLedgerRows(TRAILING_CSV)
+  const a = analyzeLedger(rows, {})
+
+  it('classifies every row correctly despite the 3 stray trailing columns', () => {
+    const b = rows.reduce((acc, r) => { acc[r.type] = (acc[r.type] || 0) + 1; return acc }, {})
+    expect(b.earning).toBe(1)
+    expect(b.giveaway).toBe(1)
+    expect(b.payout_ignored).toBe(1)
+    expect(b.adjustment).toBe(1)
+    expect(b.other).toBeUndefined() // NOT all dumped into "other"
+    // The trailing-comma trim is not a "malformed quote" repair.
+    expect(warnings.some((w) => /repaired/i.test(w))).toBe(false)
+  })
+
+  it('reads parenthesized negatives as negative amounts', () => {
+    expect(a.totals.grossEarnings).toBe(50)
+    expect(a.totals.giveawayLost).toBe(-4.29)
+    expect(a.totals.payoutsIgnoredSum).toBe(-1234.56)
+    expect(a.costs.shippingSubsidies).toBe(2.45)
+  })
+})
+
 describe('analyzeLedger', () => {
   const { rows } = parseLedgerRows(CSV)
   const a = analyzeLedger(rows, { breaksPerCase: 9 })

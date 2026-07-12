@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.19] - 2026-07-12
+
+### Fixed — Sales Dashboard sat empty for some ledger exports
+A newer Whatnot ledger export format wasn't parsed, so the dashboard loaded with
+all zeros (looked frozen). Two format quirks are now handled:
+- **Accounting-style negatives** — some exports write losses as `($36,690.75)`
+  (parentheses) instead of `-$36,690.75`. Both are now read correctly.
+- **Stray trailing columns** — some exports append extra empty columns (8 columns
+  arriving as 11), which made every row misread its Transaction Type and fall
+  into "other" with $0. Trailing empty columns are now trimmed before parsing.
+Older exports parse exactly as before.
+
 ## [1.5.18] - 2026-07-07
 
 ### Fixed — Sales Dashboard: fees, shipping & product names now read correctly
