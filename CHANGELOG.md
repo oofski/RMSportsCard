@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.21] - 2026-07-13
+
+### Changed — Orders "By break" now shows only the packages solely in that break
+- Picking a break (e.g. **Break #9**) now groups the queue into **"Only in
+  Break #9"** — packages whose **every** card is in that break, so you can pull
+  and ship them together — followed by **"Other orders."** An order that also
+  spans other breaks (e.g. 9 + 10 + 12) no longer clutters the Break #9 group;
+  it waits under "Other orders" until those breaks are open. (Previously the
+  group listed every package that merely *contained* the break.)
+- Giveaways are unchanged: a giveaway is a card in a break, so a package that is
+  solely one break — giveaway included — still groups with that break.
+
+### Added — Giveaway-only packages are flagged
+- A customer who **bought nothing and only won a giveaway** now carries a clear
+  violet **"🎁 Giveaway only"** badge in Orders, so the promo-only shipment is
+  impossible to miss and still gets pulled and shipped. (It also appears in its
+  break's group like any other package.)
+
 ## [1.5.20] - 2026-07-12
 
 ### Added — Orders: view one break at a time

@@ -150,6 +150,10 @@ table.grid tr.clickable:focus-visible {
    multi-card package (the classic shortpack risk). Filled amber, distinct from
    the red multi-card badge. */
 .badge.giveaway-combo { background: var(--warn); color: #2a1a00; border-color: var(--warn); font-weight: 600; }
+/* Giveaway-only package — the customer bought nothing, they only won a
+   giveaway, so none of the paid-card badges apply. Filled violet gives it its
+   own unmistakable category, distinct from the amber "giveaway + paid" combo. */
+.badge.giveaway-only { background: #7c3aed; color: #fff; border-color: #7c3aed; font-weight: 600; }
 
 /* ---- Pick list rows (Module A — tablet) -------------------------------- */
 .pick-row {

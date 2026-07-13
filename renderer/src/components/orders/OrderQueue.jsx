@@ -211,10 +211,20 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   }, [orders])
 
   // When a break is selected, split the (already stage/search-filtered) list into
-  // the packages that contain that break and everyone else.
-  const orderHasBreak = (o, n) => (o.breaks || []).some((b) => b.breakNumber === n)
-  const inBreak = breakFilter != null ? visible.filter((o) => orderHasBreak(o, breakFilter)) : []
-  const others = breakFilter != null ? visible.filter((o) => !orderHasBreak(o, breakFilter)) : []
+  // the packages that belong SOLELY to that break and everyone else.
+  //
+  // "Solely in break N" = every card the package contains is in break N — i.e.
+  // the order spans exactly one break, and it's N. (A giveaway is just a card
+  // slot in a break, so giveaways count here too.) These are the packages you
+  // can pull and ship the moment break N is done; an order that also spans
+  // breaks 10/12 can't be finished from break N alone, so it drops to
+  // "Other orders" instead of cluttering the break-N group.
+  const soleBreakOf = (o) => {
+    const bs = o.breaks || []
+    return bs.length === 1 ? bs[0].breakNumber : null
+  }
+  const inBreak = breakFilter != null ? visible.filter((o) => soleBreakOf(o) === breakFilter) : []
+  const others = breakFilter != null ? visible.filter((o) => soleBreakOf(o) !== breakFilter) : []
 
   const toggleExpand = (id) => setExpanded((prev) => {
     const n = new Set(prev)
@@ -244,6 +254,11 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
     const isExpanded = expanded.has(o.id)
     const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
     const focusBreak = breakFilter != null ? (o.breaks || []).find((b) => b.breakNumber === breakFilter) : null
+    // Giveaway-only package: the customer bought nothing, they only won a
+    // giveaway (every card in the package is a giveaway). None of the paid-card
+    // badges apply to it, so without its own flag it looks like an empty order —
+    // this makes the promo-only shipment impossible to miss.
+    const giveawayOnly = o.hasGiveaway && o.cardCount > 0 && o.giveawayCount >= o.cardCount
     return (
       <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
         {/* Collapsed row — tap anywhere to drop down the team checklist. */}
@@ -272,17 +287,25 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
               </span>
             )}
             {o.customer.isNew && <span className="badge amber">New</span>}
-            {o.multiCard && (
+            {o.multiCard && !giveawayOnly && (
               <span className="badge red" title={`Multiple cards (${o.cardCount}) across this order — double-check every card is packed`}>
                 {o.cardCount} cards
               </span>
             )}
-            {o.multiCard && o.hasGiveaway && (
+            {o.multiCard && o.hasGiveaway && !giveawayOnly && (
               <span
                 className="badge giveaway-combo"
                 title={`${o.cardCount} cards including ${o.giveawayCount} giveaway${o.giveawayCount > 1 ? 's' : ''} — verify the giveaway card ships with this package`}
               >
                 🎁 Giveaway + {o.cardCount} cards
+              </span>
+            )}
+            {giveawayOnly && (
+              <span
+                className="badge giveaway-only"
+                title={`Giveaway only — this customer bought nothing, they only won ${o.giveawayCount > 1 ? `${o.giveawayCount} giveaways` : 'a giveaway'}. It still needs to be pulled and shipped.`}
+              >
+                🎁 Giveaway only{o.giveawayCount > 1 ? ` (${o.giveawayCount})` : ''}
               </span>
             )}
             {o.topSleevedCount > 0 && (
@@ -432,10 +455,14 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
       ) : (
         <>
           <div className="section-title" style={{ margin: '4px 0' }}>
-            Break #{breakFilter} — {inBreak.length} package{inBreak.length === 1 ? '' : 's'}
+            Only in Break #{breakFilter} — {inBreak.length} package{inBreak.length === 1 ? '' : 's'}
+          </div>
+          <div className="muted small" style={{ marginTop: -2, marginBottom: 6 }}>
+            Packages whose every card is in Break #{breakFilter} — pull and ship these together.
+            Orders that also span other breaks are under “Other orders” below.
           </div>
           {inBreak.length === 0
-            ? <div className="muted">No orders in Break #{breakFilter} match this filter.</div>
+            ? <div className="muted">No packages are solely in Break #{breakFilter}.</div>
             : inBreak.map((o, idx) => orderRow(o, idx, inBreak))}
           <div className="section-title" style={{ margin: '20px 0 4px' }}>
             Other orders — {others.length}
