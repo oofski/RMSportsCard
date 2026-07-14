@@ -11,6 +11,9 @@ dist/
 data/
 *.local
 
+# Inventory app runtime data + auto-generated self-signed certificates
+inventory/data/
+
 # Logs
 *.log
 npm-debug.log*
