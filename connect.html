@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>RM Cardz — Connect your phone</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%233E6EB5'/><text x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>RM</text></svg>" />
+  <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .app { padding-bottom: 40px; }
+    .connect-hero { text-align: center; margin: 8px 0 20px; }
+    .connect-hero h1 { font-size: 24px; margin: 0 0 6px; }
+    .connect-hero p { color: var(--muted); margin: 0; }
+    .qr-cards { display: grid; gap: 14px; grid-template-columns: 1fr; }
+    @media (min-width: 520px) { .qr-cards { grid-template-columns: repeat(2, 1fr); } }
+    .qr-card {
+      background: var(--card); border: 1px solid var(--line); border-radius: var(--radius);
+      box-shadow: var(--shadow); padding: 18px; text-align: center;
+    }
+    .qr-card img { width: 220px; max-width: 100%; image-rendering: pixelated; border-radius: 10px; }
+    .qr-card .url { font-family: ui-monospace, Menlo, monospace; font-size: 14px; color: var(--slate); margin-top: 10px; word-break: break-all; }
+    .steps { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 18px; margin-top: 18px; }
+    .steps h2 { font-size: 15px; margin: 0 0 12px; }
+    .steps ol { margin: 0; padding-left: 20px; }
+    .steps li { margin-bottom: 10px; }
+    .steps b { color: var(--brand-dark); }
+    details { margin-top: 16px; background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px 18px; }
+    details summary { cursor: pointer; font-weight: 650; }
+    details p, details li { color: var(--slate); font-size: 14px; }
+    .note { background: var(--amber-bg); border: 1px solid #fde68a; color: #713f12; padding: 14px; border-radius: 12px; margin-top: 16px; }
+    .back { margin-top: 22px; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark">RM</span><span class="brand-name">Connect a phone</span></div>
+  </header>
+
+  <main class="app">
+    <div class="connect-hero">
+      <h1>📱 Scan to open on your phone</h1>
+      <p>Make sure your phone is on the <b>same WiFi</b> as this computer.</p>
+    </div>
+
+    <div id="cards" class="qr-cards"><div class="spinner">Finding this computer’s address…</div></div>
+
+    <div class="steps">
+      <h2>How to connect</h2>
+      <ol>
+        <li>Open your phone’s <b>Camera</b> app and point it at a QR code above.</li>
+        <li>Tap the link that pops up.</li>
+        <li id="warnStep">Your phone will say the connection <b>“isn’t private.”</b> That’s expected for a local app on your own network. Tap through it once:
+          <br>• <b>iPhone (Safari):</b> Show Details → “visit this website”.
+          <br>• <b>Android (Chrome):</b> Advanced → “Proceed anyway”.</li>
+        <li>When the app opens, tap the browser’s <b>Share → Add to Home Screen</b> so next time it’s one tap — no QR needed.</li>
+      </ol>
+    </div>
+
+    <details>
+      <summary>Advanced: remove the security warning permanently</summary>
+      <p>Optional — the steps above already work. To never see the warning again on a phone, install this computer’s certificate as trusted on that phone:</p>
+      <ol>
+        <li><a href="/cert" download>Download the certificate</a> (open this page on the phone first, then tap the link).</li>
+        <li><b>iPhone:</b> Settings → General → VPN &amp; Device Management → install the profile. Then Settings → General → About → <b>Certificate Trust Settings</b> → turn it on for “RM Cardz Inventory”.</li>
+        <li><b>Android:</b> Settings → Security → “Install a certificate” → CA certificate → pick the downloaded file.</li>
+      </ol>
+    </details>
+
+    <a class="btn btn-block back" href="/">← Back to inventory</a>
+  </main>
+
+  <script src="/vendor/qrcode.js"></script>
+  <script>
+    (async function () {
+      var cards = document.getElementById('cards')
+      function qrImg(text) {
+        try {
+          var qr = qrcode(0, 'M'); qr.addData(text); qr.make()
+          return qr.createDataURL(7, 2)
+        } catch (e) { return null }
+      }
+      try {
+        var info = await (await fetch('/api/connect-info')).json()
+        var urls = (info.urls || []).map(function (u) { return u.replace(/\/$/, '') + '/' })
+        if (!urls.length) {
+          cards.innerHTML = '<div class="note">Couldn’t detect this computer’s network address. Make sure it’s connected to WiFi/Ethernet, then reload.</div>'
+          return
+        }
+        if (info.scheme !== 'https') {
+          document.getElementById('warnStep').innerHTML =
+            'You’re running in <b>HTTP</b> mode, so phone camera scanning is disabled. Restart without <code>INVENTORY_HTTP=1</code> to enable it.'
+        }
+        cards.innerHTML = urls.map(function (u) {
+          var src = qrImg(u)
+          return '<div class="qr-card">' +
+            (src ? '<img src="' + src + '" alt="QR for ' + u + '">' : '<p>QR unavailable</p>') +
+            '<div class="url">' + u + '</div></div>'
+        }).join('')
+      } catch (e) {
+        cards.innerHTML = '<div class="note">Could not load connection info: ' + (e && e.message) + '</div>'
+      }
+    })()
+  </script>
+</body>
+</html>
