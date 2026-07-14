@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f172a" />
   <title>RM Cardz — Inventory</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='18' fill='%233E6EB5'/><text x='50' y='68' font-size='54' text-anchor='middle' fill='white' font-family='sans-serif' font-weight='700'>RM</text></svg>" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <header class="app-header">
@@ -40,8 +40,10 @@
   <div id="toast" class="toast" hidden></div>
 
   <!-- Vendored, MIT-licensed. See vendor/LICENSES.md -->
-  <script src="/vendor/jsQR.js"></script>
-  <script src="/vendor/qrcode.js"></script>
-  <script src="/app.js"></script>
+  <script src="vendor/jsQR.js"></script>
+  <script src="vendor/qrcode.js"></script>
+  <!-- Client-side data store: lets the app run with no backend (static hosting). -->
+  <script src="store-local.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>

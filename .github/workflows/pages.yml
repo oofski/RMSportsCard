@@ -1,0 +1,53 @@
+name: Deploy Inventory to GitHub Pages
+
+# Publishes the inventory web app (inventory/public) to GitHub Pages, so it can
+# be opened on a phone at a normal https:// URL — no local server to run, no
+# self-signed-certificate warning, camera scanning works out of the box.
+#
+# The app runs fully client-side there (data is stored in the browser via
+# inventory/public/store-local.js), so no backend is deployed.
+
+on:
+  push:
+    branches:
+      - claude/inventory-manager-qr-pnnl0q
+    paths:
+      - 'inventory/public/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch: {}
+
+# Least-privilege permissions needed to publish to Pages.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deploy at a time; newer pushes supersede in-flight ones.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          # Turn Pages on automatically if it isn't already (best-effort).
+          enablement: true
+
+      - name: Upload the static inventory app
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: inventory/public
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

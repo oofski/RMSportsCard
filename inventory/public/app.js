@@ -32,7 +32,14 @@ function toast(msg, kind = '') {
   toastTimer = setTimeout(() => { toastEl.hidden = true }, 2400)
 }
 
-/* ---- API ----------------------------------------------------------------- */
+/* ---- API -----------------------------------------------------------------
+   The app can run two ways, and picks automatically at startup:
+   • "server" — talks to the Express backend (inventory/server.cjs) over REST.
+   • "local"  — no backend; data lives in the browser (store-local.js), so the
+                app works as a plain static website (e.g. GitHub Pages).
+   Both expose the same get/post/patch/del interface, so the view code below is
+   identical regardless of mode. `backend` is chosen in boot().
+--------------------------------------------------------------------------- */
 async function apiFetch(path, opts) {
   const res = await fetch('/api' + path, {
     headers: { 'Content-Type': 'application/json' },
@@ -43,11 +50,25 @@ async function apiFetch(path, opts) {
   if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`)
   return data
 }
-const api = {
+const serverApi = {
   get: (p) => apiFetch(p),
   post: (p, body) => apiFetch(p, { method: 'POST', body: JSON.stringify(body || {}) }),
   patch: (p, body) => apiFetch(p, { method: 'PATCH', body: JSON.stringify(body || {}) }),
   del: (p) => apiFetch(p, { method: 'DELETE' }),
+}
+const localApi = {
+  get: (p) => window.InventoryLocal.route('GET', p, null),
+  post: (p, body) => window.InventoryLocal.route('POST', p, body || {}),
+  patch: (p, body) => window.InventoryLocal.route('PATCH', p, body || {}),
+  del: (p) => window.InventoryLocal.route('DELETE', p, null),
+}
+let backend = serverApi
+const isLocal = () => backend === localApi
+const api = {
+  get: (p) => backend.get(p),
+  post: (p, b) => backend.post(p, b),
+  patch: (p, b) => backend.patch(p, b),
+  del: (p) => backend.del(p),
 }
 
 /* ---- QR helpers ---------------------------------------------------------- */
@@ -144,7 +165,16 @@ async function viewList(query) {
   appEl.innerHTML = `
     <input id="search" class="search" type="search" placeholder="Search items, codes, locations…"
       value="${escapeHtml(initial)}" autocomplete="off" />
-    <div id="list" class="list"><div class="spinner">Loading…</div></div>`
+    <div id="list" class="list"><div class="spinner">Loading…</div></div>
+    ${isLocal() ? `
+      <div class="local-tools">
+        <div class="local-tools-note">Your inventory is saved on this device. Back it up, or move it to another phone/computer:</div>
+        <div class="btn-row">
+          <button class="btn" id="exportBtn">⭳ Back up</button>
+          <label class="btn" for="importFile">⭱ Restore</label>
+          <input id="importFile" type="file" accept="application/json,.json" hidden />
+        </div>
+      </div>` : ''}`
 
   const listEl = document.getElementById('list')
   const searchEl = document.getElementById('search')
@@ -186,6 +216,33 @@ async function viewList(query) {
     clearTimeout(debounce)
     debounce = setTimeout(load, 180)
   })
+
+  if (isLocal()) {
+    document.getElementById('exportBtn').onclick = () => {
+      const blob = new Blob([window.InventoryLocal.dump()], { type: 'application/json' })
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = 'rmcardz-inventory-backup.json'
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      toast('Backup downloaded', 'ok')
+    }
+    document.getElementById('importFile').onchange = (e) => {
+      const file = e.target.files && e.target.files[0]
+      if (!file) return
+      const reader = new FileReader()
+      reader.onload = () => {
+        try {
+          window.InventoryLocal.replace(reader.result)
+          toast('Inventory restored', 'ok')
+          load()
+          refreshStats()
+        } catch (err) { toast(err.message, 'err') }
+      }
+      reader.readAsText(file)
+    }
+  }
+
   load()
 }
 
@@ -527,6 +584,28 @@ async function viewLabels() {
   document.getElementById('printAll').onclick = () => printLabels(items)
 }
 
-/* ---- Boot ---------------------------------------------------------------- */
-window.addEventListener('hashchange', render)
-render()
+/* ---- Boot ----------------------------------------------------------------
+   Detect whether a backend is reachable. If not (static hosting like GitHub
+   Pages, or opened as a file), fall back to the in-browser local store.
+--------------------------------------------------------------------------- */
+async function detectBackend() {
+  try {
+    const res = await fetch('/api/health', { cache: 'no-store' })
+    if (res.ok) return 'server'
+  } catch (_) { /* no backend */ }
+  return 'local'
+}
+
+;(async function boot() {
+  let mode = 'server'
+  if (window.InventoryLocal) mode = await detectBackend()
+  backend = mode === 'local' ? localApi : serverApi
+  document.body.dataset.mode = mode
+  if (mode === 'local') {
+    // The "link a phone" flow is server-only; there's nothing to connect to here.
+    const cl = document.querySelector('.connect-link')
+    if (cl) cl.remove()
+  }
+  window.addEventListener('hashchange', render)
+  render()
+})()

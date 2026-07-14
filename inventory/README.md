@@ -4,12 +4,54 @@ A lightweight, phone-friendly inventory manager for the RM Cardz card business.
 Stick a QR label on each box/lot, then **scan it with your phone** to instantly
 see stock and adjust it (stock in / stock out) — no logging into the desktop app.
 
-It lives in the same repo as the main RM Cardz desktop app but runs on its own:
-a single **zero-dependency** Node server (built-in `http`/`https` only) that
-serves a mobile web UI and a small JSON API on top of a local JSON file. Nothing
-to `npm install`, no cloud, no accounts.
+There are **two ways to use it** — pick one:
 
-## Quick start
+| | Best for | Data lives | Setup |
+| --- | --- | --- | --- |
+| **A. Website (GitHub Pages)** | Just opening a link on your phone | On the device (per browser) | One GitHub setting — [see below](#option-a-just-open-it-as-a-website-recommended) |
+| **B. Local server** | Sharing one inventory across phone + computer on your WiFi | A JSON file on your computer | Run `node inventory/server.cjs` |
+
+The **same app** powers both; it automatically uses the browser for storage when
+there's no server (website mode) or the server's JSON file when you run it locally.
+
+---
+
+## Option A: Just open it as a website (recommended)
+
+No installing, no running anything. The app is published to **GitHub Pages** —
+a normal `https://…` link you open on your phone. Because it's real HTTPS, the
+camera works with **no certificate warning**, and you don't type any IP address.
+
+**Turn it on once (repo owner):**
+
+1. Go to your repo on GitHub → **Settings** → **Pages** (left sidebar).
+2. Under **Build and deployment → Source**, choose **GitHub Actions**.
+3. Open the **Actions** tab → the **"Deploy Inventory to GitHub Pages"** workflow
+   → **Run workflow** (pick the `claude/inventory-manager-qr-pnnl0q` branch) if it
+   didn't run automatically.
+4. When it finishes (~1 minute), your link appears under **Settings → Pages** and
+   in the workflow's summary. It looks like:
+
+   ```
+   https://oofski.github.io/rmsportscard/
+   ```
+
+5. Open that on your phone and **Add to Home Screen** — now it's an app icon.
+
+In website mode your data is stored **on that device**. Use the **Back up** /
+**Restore** buttons at the bottom of the item list to save a copy or move it to
+another phone/computer. (Want one shared inventory synced across devices instead?
+Use Option B, or ask for a hosted-backend version.)
+
+---
+
+## Option B: Run it locally (shared over your WiFi)
+
+Runs a single **zero-dependency** Node server (built-in `http`/`https` only) that
+serves the same UI plus a small JSON API backed by a local JSON file. Nothing to
+`npm install`.
+
+### Quick start
 
 ```sh
 node inventory/server.cjs
@@ -112,8 +154,11 @@ All JSON. Useful if you want to script against it.
 Part of the repo's Vitest suite:
 
 ```sh
-npm test               # runs everything, including test/inventory.test.js
+npm test               # runs everything
 ```
+
+- `test/inventory.test.js` — the server API + lifecycle (Option B).
+- `test/inventory.local.test.js` — the client-side store used in website mode (Option A).
 
 ## Notes
 

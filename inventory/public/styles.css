@@ -325,6 +325,11 @@ html, body {
 
 .spinner { text-align: center; color: var(--muted); padding: 40px; }
 
+/* ---- Local-mode backup/restore ------------------------------------------ */
+.local-tools { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--line); }
+.local-tools-note { font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.local-tools .btn-row { max-width: 360px; }
+
 @media print {
   .app-header, .tabbar, .labels-toolbar, .toast { display: none !important; }
   body { background: #fff; }
