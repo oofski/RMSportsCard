@@ -8,7 +8,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 
 const require = createRequire(import.meta.url)
-const { start } = require('../inventory/server.cjs')
+const { start, terminalQr } = require('../inventory/server.cjs')
 
 let handle
 let base
@@ -43,6 +43,31 @@ describe('health & empty state', () => {
     expect(r.status).toBe(200)
     expect(r.headers.get('content-type')).toMatch(/text\/html/)
     expect(await r.text()).toContain('RM Cardz')
+  })
+})
+
+describe('phone connect helpers', () => {
+  it('reports LAN URLs for the /connect page', async () => {
+    const d = await json('/api/connect-info')
+    expect(d.scheme).toBe('http') // this test runs over plain HTTP
+    expect(Array.isArray(d.urls)).toBe(true)
+  })
+
+  it('serves the /connect helper page', async () => {
+    const r = await fetch(base + '/connect')
+    expect(r.status).toBe(200)
+    expect(await r.text()).toContain('Scan to open on your phone')
+  })
+
+  it('404s /cert when running without HTTPS (no cert in play)', async () => {
+    const r = await fetch(base + '/cert')
+    expect(r.status).toBe(404)
+  })
+
+  it('builds a scannable terminal QR string', () => {
+    const s = terminalQr('https://192.168.1.50:8787/')
+    expect(s.length).toBeGreaterThan(0)
+    expect(s).toContain('▀')
   })
 })
 

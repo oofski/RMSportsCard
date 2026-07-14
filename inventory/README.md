@@ -16,26 +16,47 @@ node inventory/server.cjs
 # or:  npm run inventory
 ```
 
-You'll see something like:
+The terminal prints a **QR code** — just point your phone's camera at it to
+open the app. No typing an IP address.
 
 ```
   On this computer:   https://localhost:8787
 
-  On your phone (same WiFi), open one of these:
-      https://192.168.1.42:8787
+  ── Open on your phone (same WiFi) ─────────────────────────
+  Point your phone camera at this QR code:
+
+      █▀▀▀▀▀█ ▀▄▀ █▀▀▀▀▀█
+      █ ███ █ ▀█▀ █ ███ █      (a real scannable QR renders here)
+      █ ▀▀▀ █ ▀ ▀ █ ▀▀▀ █
+      ▀▀▀▀▀▀▀ ▀ ▀ ▀▀▀▀▀▀▀
+
+  …or open on this computer:   https://localhost:8787/connect
 ```
 
 1. On your computer, open the `localhost` URL to add items and print labels.
-2. On your **phone** (same WiFi), open the `192.168.x.x` URL to scan.
+2. To use your **phone**: scan the QR in the terminal, **or** open
+   `https://localhost:8787/connect` on the computer for a bigger QR and
+   step-by-step instructions, **or** tap the 📱 icon in the app header.
 
-### The certificate warning is expected
+Prefer not to look at the terminal? The **/connect** page shows the QR plus the
+exact taps for the one-time security prompt on iPhone and Android.
+
+### The certificate warning (one-time)
 
 Phone browsers only allow the camera on a **secure connection**, so the server
 serves HTTPS with a **self-signed certificate** it generates on first run. The
-first time you open it, your phone will warn "Not secure / Not private" — tap
-**Advanced → Proceed anyway**. This is normal for a local app and is required
-for QR scanning to work. (On the computer itself, `localhost` is already trusted,
-so scanning works there without any warning.)
+first time you open it on a phone, you'll see a "Not secure / Not private"
+warning — tap through it once (iPhone Safari: *Show Details → visit this
+website*; Android Chrome: *Advanced → Proceed*). This is normal for a local app
+and is required for QR scanning.
+
+The certificate is generated **once and reused**, so you only accept it a single
+time — it is *not* re-generated when your computer's IP changes. (On the computer
+itself, `localhost` is already trusted, so there's no warning there.)
+
+Want to never see the warning again? The **/connect** page has an *"Advanced:
+remove the security warning permanently"* section that walks you through
+installing the certificate as trusted on your phone (download link: `/cert`).
 
 If you don't need phone scanning, run plain HTTP:
 

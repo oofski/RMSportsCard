@@ -64,6 +64,9 @@ html, body {
   letter-spacing: 0.5px;
 }
 .brand-name { font-weight: 700; font-size: 18px; letter-spacing: 0.2px; }
+.header-right { display: flex; align-items: center; gap: 12px; }
+.connect-link { font-size: 22px; text-decoration: none; line-height: 1; opacity: 0.9; }
+.connect-link:active { opacity: 0.6; }
 .stats { display: flex; gap: 14px; font-size: 12px; text-align: right; }
 .stats .stat b { display: block; font-size: 16px; font-weight: 700; line-height: 1.1; }
 .stats .stat span { color: #cbd5e1; }
