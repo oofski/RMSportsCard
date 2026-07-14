@@ -22,21 +22,22 @@ No installing, no running anything. The app is published to **GitHub Pages** —
 a normal `https://…` link you open on your phone. Because it's real HTTPS, the
 camera works with **no certificate warning**, and you don't type any IP address.
 
-**Turn it on once (repo owner):**
+**Turn it on once (repo owner):** the deploy workflow builds the site into a
+`gh-pages` branch automatically. Point Pages at that branch:
 
 1. Go to your repo on GitHub → **Settings** → **Pages** (left sidebar).
-2. Under **Build and deployment → Source**, choose **GitHub Actions**.
-3. Open the **Actions** tab → the **"Deploy Inventory to GitHub Pages"** workflow
-   → **Run workflow** (pick the `claude/inventory-manager-qr-pnnl0q` branch) if it
-   didn't run automatically.
-4. When it finishes (~1 minute), your link appears under **Settings → Pages** and
-   in the workflow's summary. It looks like:
+2. Under **Build and deployment → Source**, choose **Deploy from a branch**.
+3. Set **Branch** to **`gh-pages`**, folder **`/ (root)`**, then click **Save**.
+4. Wait ~1 minute, then refresh. Your link appears at the top of the page:
 
    ```
-   https://oofski.github.io/rmsportscard/
+   https://oofski.github.io/RMSportsCard/
    ```
 
 5. Open that on your phone and **Add to Home Screen** — now it's an app icon.
+
+Every push that changes `inventory/public/**` rebuilds the `gh-pages` branch, so
+the site updates itself.
 
 In website mode your data is stored **on that device**. Use the **Back up** /
 **Restore** buttons at the bottom of the item list to save a copy or move it to
