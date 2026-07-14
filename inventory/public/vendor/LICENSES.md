@@ -4,11 +4,13 @@ These browser libraries are bundled locally (rather than loaded from a CDN) so
 the inventory app is fully self-contained and works offline on the phone. Both
 are MIT-licensed.
 
-## jsQR.js
-- Purpose: decode QR codes from camera frames (scanning).
-- Project: https://github.com/cozmo/jsQR
-- Version: 1.4.0
-- License: MIT — Copyright (c) 2017 Cosmo Wolfe
+## zxing.js
+- Purpose: decode barcodes (UPC-A, EAN-13/8, Code 128, Code 39, …) and QR codes
+  from the camera (scanning).
+- Project: https://github.com/zxing-js/library ("@zxing/library")
+- Version: 0.19.1
+- License: MIT — Copyright (c) 2018 ZXing for JS (a TypeScript port of the
+  Apache-2.0 ZXing project).
 
 ## qrcode.js
 - Purpose: generate QR codes for printable labels.

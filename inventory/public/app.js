@@ -369,9 +369,9 @@ async function viewForm(id, prefillCode) {
         <input id="f-name" required value="${escapeHtml(item.name)}" placeholder="e.g. 2023 Prizm Football Hobby Box" />
       </div>
       <div class="field">
-        <label for="f-code">QR code</label>
-        <input id="f-code" value="${escapeHtml(item.code)}" placeholder="${editing ? '' : 'Leave blank to auto-generate'}" autocapitalize="characters" />
-        <span class="hint">${editing ? 'Changing this changes what the label must encode.' : 'This is what the QR label will contain. Auto-generated if blank.'}</span>
+        <label for="f-code">Barcode / code</label>
+        <input id="f-code" value="${escapeHtml(item.code)}" placeholder="${editing ? '' : 'Scan or type a barcode, or leave blank'}" autocapitalize="characters" />
+        <span class="hint">${editing ? 'The barcode or code used to pull up this item when you scan.' : 'Scan an item’s existing barcode into here, or leave blank to auto-generate a code you can print.'}</span>
       </div>
       <div class="grid-2">
         <div class="field">
@@ -430,7 +430,7 @@ async function viewForm(id, prefillCode) {
 }
 
 /* =============================================================================
-   View: QR Scanner
+   View: Scanner (barcodes + QR)
    ============================================================================= */
 async function handleScannedCode(raw) {
   const code = extractCode(raw)
@@ -453,20 +453,22 @@ async function handleScannedCode(raw) {
 function viewScan() {
   const secure = window.isSecureContext
   const hasCamera = !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+  const hasReader = !!(window.ZXing && window.ZXing.BrowserMultiFormatReader)
+  const canScan = secure && hasCamera && hasReader
 
   appEl.innerHTML = `
     ${!secure ? `<div class="scan-note"><b>Camera needs a secure connection.</b><br>
-      Open this app over <b>https://</b> (accept the certificate warning) or on the computer itself.
-      You can still look up an item by typing its code below.</div>` : ''}
-    <div class="scanner" id="scanner" ${(!secure || !hasCamera) ? 'style="display:none"' : ''}>
+      Open this app over <b>https://</b> or on the computer itself.
+      You can still look up an item by typing its number below.</div>` : ''}
+    <div class="scanner" id="scanner" ${!canScan ? 'style="display:none"' : ''}>
       <video id="video" playsinline muted></video>
       <div class="scan-frame"></div>
     </div>
-    <div class="scan-hint" id="scanHint">${(secure && hasCamera) ? 'Point the camera at a QR code' : ''}</div>
+    <div class="scan-hint" id="scanHint">${canScan ? 'Point the camera at a barcode or QR code' : ''}</div>
 
-    <div class="divider">or enter a code</div>
+    <div class="divider">or enter it by hand</div>
     <form id="manual" class="btn-row">
-      <input id="manualCode" class="search" style="margin:0" placeholder="Type or paste a code" autocapitalize="characters" autocomplete="off" />
+      <input id="manualCode" class="search" style="margin:0" placeholder="Type or paste a barcode / code" autocomplete="off" />
       <button class="btn btn-primary" type="submit">Go</button>
     </form>`
 
@@ -476,60 +478,39 @@ function viewScan() {
     if (v) handleScannedCode(v)
   })
 
-  if (!secure || !hasCamera) return
+  if (!canScan) return
 
   const video = document.getElementById('video')
   const hint = document.getElementById('scanHint')
-  const canvas = document.createElement('canvas')
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  let stream = null
-  let raf = null
+  const reader = new window.ZXing.BrowserMultiFormatReader()
   let done = false
 
   function stop() {
     done = true
-    if (raf) cancelAnimationFrame(raf)
-    if (stream) stream.getTracks().forEach((t) => t.stop())
-    stream = null
+    try { reader.reset() } catch (_) { /* ignore */ }
   }
   stopScanner = stop
 
-  function tick() {
-    if (done) return
-    if (video.readyState === video.HAVE_ENOUGH_DATA && typeof window.jsQR === 'function') {
-      // Downscale to keep decoding fast on phones.
-      const scale = Math.min(1, 640 / (video.videoWidth || 640))
-      canvas.width = Math.round((video.videoWidth || 640) * scale)
-      canvas.height = Math.round((video.videoHeight || 480) * scale)
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
-      const img = ctx.getImageData(0, 0, canvas.width, canvas.height)
-      const result = window.jsQR(img.data, img.width, img.height, { inversionAttempts: 'dontInvert' })
-      if (result && result.data) {
+  // ZXing reads QR codes AND 1D barcodes (UPC-A, EAN-13/8, Code 128, Code 39, …),
+  // scanning continuously from the live camera until one is recognized.
+  reader
+    .decodeFromConstraints(
+      { video: { facingMode: { ideal: 'environment' } }, audio: false },
+      video,
+      (result) => {
+        if (done || !result) return // no code in this frame — keep scanning
         stop()
         if (navigator.vibrate) navigator.vibrate(60)
-        handleScannedCode(result.data)
-        return
-      }
-    }
-    raf = requestAnimationFrame(tick)
-  }
-
-  navigator.mediaDevices
-    .getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false })
-    .then((s) => {
-      if (done) { s.getTracks().forEach((t) => t.stop()); return }
-      stream = s
-      video.srcObject = s
-      return video.play()
-    })
-    .then(() => { if (!done) raf = requestAnimationFrame(tick) })
+        handleScannedCode(result.getText ? result.getText() : String(result))
+      },
+    )
     .catch((err) => {
       const scanner = document.getElementById('scanner')
       if (scanner) scanner.style.display = 'none'
       if (hint) hint.textContent = ''
       const msg = err && err.name === 'NotAllowedError'
-        ? 'Camera permission was blocked. Enter a code below, or allow camera access and reopen Scan.'
-        : 'Could not start the camera. Enter a code below instead.'
+        ? 'Camera permission was blocked. Enter the number below, or allow camera access and reopen Scan.'
+        : 'Could not start the camera. Enter the number below instead.'
       const note = document.createElement('div')
       note.className = 'scan-note'
       note.textContent = msg

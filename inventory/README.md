@@ -1,8 +1,10 @@
 # RM Cardz — Inventory Manager (mobile QR app)
 
 A lightweight, phone-friendly inventory manager for the RM Cardz card business.
-Stick a QR label on each box/lot, then **scan it with your phone** to instantly
-see stock and adjust it (stock in / stock out) — no logging into the desktop app.
+**Scan an item with your phone** — its existing **barcode** (UPC/EAN on sealed
+boxes and supplies) or a **QR label** you print for loose lots — to instantly see
+stock and adjust it (stock in / stock out), no logging into the desktop app. The
+scanner reads both barcodes (UPC-A, EAN-13/8, Code 128, Code 39, …) and QR codes.
 
 There are **two ways to use it** — pick one:
 
@@ -163,7 +165,7 @@ npm test               # runs everything
 
 ## Notes
 
-- **Self-contained:** no external services; QR libraries are vendored locally
-  (`public/vendor/`, MIT-licensed — see `LICENSES.md`).
+- **Self-contained:** no external services; the barcode/QR libraries are vendored
+  locally (`public/vendor/`, MIT-licensed — see `LICENSES.md`).
 - **Not exposed to the internet:** it binds to your LAN. Keep it on a trusted
   network; there's no authentication (single-operator tool, like the desktop app).
