@@ -463,8 +463,9 @@ function viewScan() {
     <div class="scanner" id="scanner" ${!canScan ? 'style="display:none"' : ''}>
       <video id="video" playsinline muted></video>
       <div class="scan-frame"></div>
+      <div class="scan-controls" id="scanControls"></div>
     </div>
-    <div class="scan-hint" id="scanHint">${canScan ? 'Point the camera at a barcode or QR code' : ''}</div>
+    <div class="scan-hint" id="scanHint">${canScan ? 'Line the barcode up inside the box and hold steady' : ''}</div>
 
     <div class="divider">or enter it by hand</div>
     <form id="manual" class="btn-row">
@@ -480,29 +481,62 @@ function viewScan() {
 
   if (!canScan) return
 
+  const Z = window.ZXing
   const video = document.getElementById('video')
   const hint = document.getElementById('scanHint')
-  const reader = new window.ZXing.BrowserMultiFormatReader()
+
+  // Restrict to the formats actually used (UPC/EAN barcodes + Code 128/39/ITF +
+  // QR) and enable TRY_HARDER. Fewer formats = faster and far fewer misreads.
+  const hints = new Map()
+  hints.set(Z.DecodeHintType.POSSIBLE_FORMATS, [
+    Z.BarcodeFormat.UPC_A, Z.BarcodeFormat.UPC_E, Z.BarcodeFormat.EAN_13, Z.BarcodeFormat.EAN_8,
+    Z.BarcodeFormat.CODE_128, Z.BarcodeFormat.CODE_39, Z.BarcodeFormat.ITF, Z.BarcodeFormat.QR_CODE,
+  ])
+  hints.set(Z.DecodeHintType.TRY_HARDER, true)
+  const reader = new Z.BrowserMultiFormatReader(hints, 200) // scan ~5x/sec
+
   let done = false
+  let ctlTimer = null
+  let lastText = null
+  let sameCount = 0
 
   function stop() {
     done = true
+    if (ctlTimer) { clearInterval(ctlTimer); ctlTimer = null }
     try { reader.reset() } catch (_) { /* ignore */ }
   }
   stopScanner = stop
 
-  // ZXing reads QR codes AND 1D barcodes (UPC-A, EAN-13/8, Code 128, Code 39, …),
-  // scanning continuously from the live camera until one is recognized.
+  // Accept a read only after seeing the SAME value on two consecutive frames.
+  // Combined with the check digit that UPC/EAN barcodes carry, this makes a
+  // wrong-SKU misread extremely unlikely. QR codes self-verify, so accept those
+  // on the first read.
+  function onResult(result) {
+    if (done || !result) return
+    const text = result.getText ? result.getText() : String(result)
+    const isQR = result.getBarcodeFormat && result.getBarcodeFormat() === Z.BarcodeFormat.QR_CODE
+    if (!isQR) {
+      if (text === lastText) { sameCount++ } else { lastText = text; sameCount = 1 }
+      if (sameCount < 2) { if (hint) hint.textContent = 'Reading ' + text + '… hold steady'; return }
+    }
+    stop()
+    if (navigator.vibrate) navigator.vibrate(60)
+    if (hint) hint.textContent = 'Got it: ' + text
+    handleScannedCode(text)
+  }
+
   reader
     .decodeFromConstraints(
-      { video: { facingMode: { ideal: 'environment' } }, audio: false },
-      video,
-      (result) => {
-        if (done || !result) return // no code in this frame — keep scanning
-        stop()
-        if (navigator.vibrate) navigator.vibrate(60)
-        handleScannedCode(result.getText ? result.getText() : String(result))
+      {
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
       },
+      video,
+      onResult,
     )
     .catch((err) => {
       const scanner = document.getElementById('scanner')
@@ -516,6 +550,54 @@ function viewScan() {
       note.textContent = msg
       appEl.prepend(note)
     })
+
+  // Once the stream is live, add a flashlight and zoom control if the phone
+  // exposes them (big help for small/low-contrast barcodes on iPhone).
+  let tries = 0
+  ctlTimer = setInterval(() => {
+    if (done) { clearInterval(ctlTimer); return }
+    const track = video.srcObject && video.srcObject.getVideoTracks && video.srcObject.getVideoTracks()[0]
+    if (track && track.getCapabilities) {
+      clearInterval(ctlTimer)
+      addCameraControls(track)
+    } else if (++tries > 25) {
+      clearInterval(ctlTimer)
+    }
+  }, 200)
+
+  function addCameraControls(track) {
+    const box = document.getElementById('scanControls')
+    if (!box) return
+    let caps = {}
+    try { caps = track.getCapabilities() } catch (_) { return }
+
+    if (caps.torch) {
+      let on = false
+      const btn = document.createElement('button')
+      btn.type = 'button'
+      btn.className = 'scan-ctl-btn'
+      btn.textContent = '🔦'
+      btn.setAttribute('aria-label', 'Toggle flashlight')
+      btn.onclick = async () => {
+        on = !on
+        try { await track.applyConstraints({ advanced: [{ torch: on }] }); btn.classList.toggle('on', on) } catch (_) { /* ignore */ }
+      }
+      box.appendChild(btn)
+    }
+
+    if (caps.zoom && (caps.zoom.max || 1) > (caps.zoom.min || 1)) {
+      const slider = document.createElement('input')
+      slider.type = 'range'
+      slider.className = 'scan-zoom'
+      slider.min = caps.zoom.min
+      slider.max = caps.zoom.max
+      slider.step = caps.zoom.step || 0.1
+      try { slider.value = (track.getSettings().zoom || caps.zoom.min) } catch (_) { slider.value = caps.zoom.min }
+      slider.setAttribute('aria-label', 'Zoom')
+      slider.oninput = () => { try { track.applyConstraints({ advanced: [{ zoom: Number(slider.value) }] }) } catch (_) { /* ignore */ } }
+      box.appendChild(slider)
+    }
+  }
 }
 
 /* =============================================================================
