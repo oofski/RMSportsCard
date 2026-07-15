@@ -247,8 +247,11 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   // breaks 10/12 can't be finished from break N alone, so it drops to
   // "Other orders" instead of cluttering the break-N group.
   const soleBreakOf = (o) => {
-    const bs = o.breaks || []
-    return bs.length === 1 ? bs[0].breakNumber : null
+    // Consider only real (non-null) breaks. A break-less giveaway rider (a promo
+    // with no break) must NOT demote an otherwise single-break paid order out of
+    // its break's ready group — the giveaway ships in the same package anyway.
+    const nums = [...new Set((o.breaks || []).map((b) => b.breakNumber).filter((n) => n != null))]
+    return nums.length === 1 ? nums[0] : null
   }
   const inBreak = breakFilter != null ? visible.filter((o) => soleBreakOf(o) === breakFilter) : []
   const others = breakFilter != null ? visible.filter((o) => soleBreakOf(o) !== breakFilter) : []

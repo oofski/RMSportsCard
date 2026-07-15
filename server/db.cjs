@@ -116,9 +116,17 @@ class Db {
     for (const b of prevBreaks) statusByBreakNumber.set(b.breakNumber, b.status)
     for (const b of s.breaks) {
       const st = statusByBreakNumber.get(b.breakNumber)
-      // Keep a packed/shipped break as-is; otherwise re-derive from carried checkoffs.
-      if (st === 'packed' || st === 'shipped') b.status = st
-      else this._recomputeBreakStatus(b.id)
+      // Only keep a carried packed/shipped status if the re-imported break is
+      // STILL fully checked. A corrected re-export that ADDS a new (unchecked)
+      // card to a packed/shipped break must surface it (drop to picking) rather
+      // than hide it behind a green "Packed" badge that can ship short.
+      if (st === 'packed' || st === 'shipped') {
+        const slots = s.teamSlots.filter((t) => t.breakId === b.id)
+        if (slots.length > 0 && slots.every((t) => t.checkedOff)) { b.status = st; continue }
+      }
+      // b.status is the parser default ('pending') here, so _recomputeBreakStatus
+      // (which early-returns on packed/shipped) derives pending/picking cleanly.
+      this._recomputeBreakStatus(b.id)
     }
   }
 
@@ -271,11 +279,15 @@ class Db {
     if (!b) return
     const slots = s.teamSlots.filter((t) => t.breakId === breakId)
     const checked = slots.filter((t) => t.checkedOff).length
-    // Never silently downgrade an explicit packed/shipped break when checkoffs
-    // change (e.g. the operator unchecks a card to review, or hits Clear All).
-    // Un-packing is a deliberate action, not a side effect of editing checks.
-    if (b.status === 'shipped' || b.status === 'packed') return
-    b.status = checked === 0 ? 'pending' : 'picking'
+    if (b.status === 'shipped') return
+    // "Clear All" (nothing checked) is a deliberate reset and MAY un-pack a
+    // break — this is the explicit un-pack path.
+    if (checked === 0) { b.status = 'pending'; return }
+    // A partial uncheck (unchecking one card to review it) must NOT silently
+    // downgrade an explicit packed break — un-packing is deliberate, not a side
+    // effect of editing individual checks.
+    if (b.status === 'packed') return
+    b.status = 'picking'
   }
 
   // ---------------------------------------------------------------------------

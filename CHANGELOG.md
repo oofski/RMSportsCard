@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.23] - 2026-07-15
+
+### Fixed — follow-ups caught by an adversarial review of 1.5.22
+- **A re-import no longer hides an added card behind a green "Packed" badge.**
+  If a corrected PDF adds a new (unchecked) card to a break you'd already marked
+  packed, that break now drops back to **Picking** so the added card is caught
+  instead of shipping short. (A packed break still stays packed through a normal
+  partial uncheck; only Clear All or a genuinely new card re-opens it.)
+- **A break-less giveaway no longer bumps a paid order out of its break group.**
+  An order with one paid card in Break #N plus a promo giveaway that isn't tied
+  to a break now correctly stays under **"Only in Break #N"** (the giveaway ships
+  in the same package).
+
 ## [1.5.22] - 2026-07-14
 
 ### Added — Orders open by default + Expand/Collapse all

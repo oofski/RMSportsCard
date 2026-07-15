@@ -63,20 +63,42 @@ describe('re-import carries operator state forward (corrected re-export)', () =>
   })
 })
 
-describe('packed break is not silently downgraded', () => {
-  it('keeps a packed break packed when a slot is later unchecked or cleared', () => {
+describe('packed break status behaves correctly under checkoff edits and re-import', () => {
+  it('keeps a packed break packed on a partial uncheck, but Clear All un-packs it', () => {
     const brk = db.state.breaks[0]
     const slots = db.state.teamSlots.filter((t) => t.breakId === brk.id)
     slots.forEach((s) => db.setTeamSlotChecked(s.id, true, { username: 'alice' }))
     db.markBreakPacked(brk.id)
     expect(db.state.breaks.find((b) => b.id === brk.id).status).toBe('packed')
 
-    // Unchecking a card to review must NOT revert the packed marker.
+    // Unchecking one card to review it must NOT revert the packed marker.
     db.setTeamSlotChecked(slots[0].id, false, { username: 'alice' })
     expect(db.state.breaks.find((b) => b.id === brk.id).status).toBe('packed')
 
-    // Neither should Clear All.
+    // Clear All is a deliberate reset — it IS allowed to un-pack (the un-pack path).
     db.clearBreak(brk.id)
-    expect(db.state.breaks.find((b) => b.id === brk.id).status).toBe('packed')
+    expect(db.state.breaks.find((b) => b.id === brk.id).status).toBe('pending')
+  })
+
+  it('does not keep a break packed after a re-import adds a new unchecked card (shortpack guard)', () => {
+    // Pack a break fully, then re-import a dataset whose SAME break gains an
+    // extra (unchecked) team slot. The break must NOT stay green "Packed".
+    const brk = db.state.breaks[0]
+    const brkNo = brk.breakNumber
+    db.state.teamSlots.filter((t) => t.breakId === brk.id).forEach((s) => db.setTeamSlotChecked(s.id, true, { username: 'a' }))
+    db.markBreakPacked(brk.id)
+
+    const ds = demoDataset()
+    // Append one brand-new team slot to that same break for an existing customer.
+    const anySlot = ds.teamSlots.find((t) => t.breakNumber === brkNo)
+    ds.teamSlots.push({
+      id: `slot_${brkNo}_added_x`, breakId: `break_${brkNo}`, breakNumber: brkNo,
+      teamName: 'Zzz Added Team', customerId: anySlot.customerId, orderId: null,
+      price: 10, isGiveaway: false, checkedOff: false, checkedOffAt: null, checkedOffBy: null,
+    })
+    db.importDataset(ds)
+
+    const after = db.listBreaks().find((b) => b.breakNumber === brkNo)
+    expect(after.status).not.toBe('packed') // dropped back so the new card isn't missed
   })
 })

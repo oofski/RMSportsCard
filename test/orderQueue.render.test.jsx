@@ -97,6 +97,23 @@ describe('OrderQueue renders', () => {
     expect(html).toContain('Ship in a team bag')
   })
 
+  it('keeps a paid single-break order in its ready group despite a break-less giveaway rider', () => {
+    // A paid card in Break #9 + a break-less promo giveaway (breakNumber null).
+    // The giveaway ships in the same package, so the order must stay in
+    // "Only in Break #9", not get demoted to "Other orders".
+    const withRider = [
+      order('r', 'Rider Rick', 'rick', [
+        { breakNumber: 9, teams: [team('p1', 'Dallas Cowboys')] },
+        { breakNumber: null, teams: [team('g1', 'Mystery Box', { isGiveaway: true })] },
+      ]),
+    ]
+    const html = renderToStaticMarkup(<OrderQueue initialOrders={withRider} initialBreakFilter={9} />)
+    expect(html).toContain('Only in Break #9 — 1 package') // stayed in the ready group
+    expect(html).toContain('Other orders — 0')
+    expect(html).toContain('Rider Rick')
+    expect(html).toContain('🎁 Giveaway') // the break-less rider renders under its own header
+  })
+
   it('groups "solely in the break" — multi-break orders are excluded', () => {
     const html = renderToStaticMarkup(<OrderQueue initialOrders={ORDERS} initialBreakFilter={9} />)
     // Alice (paid, solely 9) + Dave (giveaway-only, solely 9) = 2. Carol (9+10)
