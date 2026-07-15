@@ -6,6 +6,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.22] - 2026-07-14
+
+### Added — Orders open by default + Expand/Collapse all
+- Every order in the Orders queue now shows **expanded** (its team checklist
+  visible) so you can pack without clicking each one open. A single **Expand
+  all / Collapse all** toggle sits in the toolbar, and each order still collapses
+  individually with its ▾ handle.
+
+### Added — Special request (red-highlighted, pinned to the top of an order)
+- Each order has a **Special request** button. Add one and the whole order card
+  **glows red** with the request pinned at the very top ("Ship in a team bag",
+  "extra penny sleeves", …) so the packer can't miss it. Edit or clear anytime.
+
+### Added — Import log (History › Import log)
+- Every PDF you upload now records a **named entry** in a new **Import log** on
+  the History tab — you can **name what you're sorting & shipping** right on the
+  upload screen (or rename/delete it later). Each entry keeps the date, source,
+  and counts (customers, breaks, orders, shipments, giveaways).
+
+### Changed — Giveaways are always a real check-off item
+- A **giveaway** — a promo riding inside a paid package, or a package that is
+  **just a giveaway** — is now always a **checkable card** in the Orders detail
+  and the pick list (previously a break-less/omitted giveaway could vanish with
+  nothing to check). **Multiple giveaways** in one order are each their own item.
+
+### Fixed — Shipment ↔ order-stage sync and other operator-state bugs
+- **Marking an order "Sent" no longer freezes it.** A later USPS "delivered"
+  scan now advances a manually-Sent order forward to **All Good** automatically
+  (it used to stay stuck on Sent forever). Genuine delivered/returned/exception
+  decisions are still never overwritten.
+- **"Label Created" no longer reads as un-picked** — a package with a printed
+  label shows as **Put Together**, matching the Shipping Tracker.
+- **Exception / Returned are now settable** from the Orders status dropdown
+  (they used to error).
+- **Re-importing a corrected PDF keeps your work.** Packing progress, shipping
+  statuses, notes, holds, queue order, checkoffs and special requests are
+  **carried forward** for customers that still match — and "Upload new" now
+  warns before replacing, with a way back.
+- **A packed break stays packed** when you uncheck a card to review it (it used
+  to silently drop back to "picking").
+- **Move up/down** arrows are disabled correctly at the ends of the active/held
+  groups instead of doing nothing.
+
 ## [1.5.21] - 2026-07-13
 
 ### Changed — Orders "By break" now shows only the packages solely in that break

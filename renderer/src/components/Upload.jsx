@@ -25,12 +25,14 @@ import Logo from './Logo.jsx'
 // How often we re-poll the parse job while it is running (milliseconds).
 const POLL_INTERVAL_MS = 1500
 
-export default function Upload({ onImported }) {
+export default function Upload({ onImported, onCancel }) {
   // --- Core state ----------------------------------------------------------
   const [phase, setPhase] = useState('idle') // see header for the state machine
   const [dragging, setDragging] = useState(false) // dropzone hover highlight
   const [file, setFile] = useState(null) // the chosen File (null until selected)
   const [sport, setSport] = useState('auto') // league picker: auto | nfl | mlb | nba
+  const [importName, setImportName] = useState('') // "what we are sorting/shipping" (item 3)
+  const [existing, setExisting] = useState(null) // { hasData, eventName } if an event is already loaded (re-import warning)
   const [jobId, setJobId] = useState(null) // parse job id returned by uploadPdf
   const [progress, setProgress] = useState(null) // latest parseStatus payload
   const [summary, setSummary] = useState(null) // event summary once complete
@@ -59,6 +61,18 @@ export default function Upload({ onImported }) {
       stopPolling()
     }
   }, [stopPolling])
+
+  // Is an event already loaded? If so this is a RE-IMPORT — warn that it replaces
+  // the current event (packing/shipping progress is carried forward for matching
+  // customers, but a different event starts fresh) and offer a way back.
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const s = await api.getSettings()
+        if (mountedRef.current && s && s.hasData) setExisting({ hasData: true, eventName: s.eventName || null })
+      } catch { /* ignore — treat as first run */ }
+    })()
+  }, [])
 
   // --- File selection ------------------------------------------------------
   // Accept exactly one .pdf. Anything else surfaces a friendly inline message
@@ -115,7 +129,7 @@ export default function Upload({ onImported }) {
     setErrorMessage(null)
 
     try {
-      const { jobId: id } = await api.uploadPdf(file, sport)
+      const { jobId: id } = await api.uploadPdf(file, sport, importName)
       if (!mountedRef.current) return
       setJobId(id)
 
@@ -159,7 +173,7 @@ export default function Upload({ onImported }) {
       setErrorMessage(friendlyError(err))
       setPhase('error')
     }
-  }, [file, sport, stopPolling])
+  }, [file, sport, importName, stopPolling])
 
   // Reset everything back to the start so the operator can pick another file.
   const retry = () => {
@@ -211,6 +225,22 @@ export default function Upload({ onImported }) {
         {/* ---- IDLE / SELECTED: dropzone + picker ------------------------- */}
         {(phase === 'idle' || phase === 'selected') && (
           <>
+            {/* Re-import warning (bug fix): an event is already loaded, so parsing
+                a new PDF replaces it. Progress is carried forward for matching
+                customers; a genuinely different event starts fresh. */}
+            {existing && existing.hasData && (
+              <div
+                className="banner"
+                style={{ background: 'color-mix(in srgb, var(--warn) 14%, var(--bg-2))', border: '1px solid color-mix(in srgb, var(--warn) 40%, transparent)', borderRadius: 8, marginBottom: 12 }}
+              >
+                <div className="col" style={{ gap: 2 }}>
+                  <strong>Replace the current event{existing.eventName ? ` — “${existing.eventName}”` : ''}?</strong>
+                  <span className="small muted">
+                    Importing loads a new event in its place. Packing &amp; shipping progress is kept for customers that still match; anything not in the new file is cleared. Use “Back to app” below if you didn’t mean to.
+                  </span>
+                </div>
+              </div>
+            )}
             <div
               className={`dropzone${dragging ? ' drag' : ''}`}
               onDragOver={onDragOver}
@@ -259,7 +289,23 @@ export default function Upload({ onImported }) {
               </div>
             </div>
 
+            {/* Name this import — free-text label for History › Import log (item 3). */}
+            <div className="col" style={{ gap: 6, marginTop: 14 }}>
+              <div className="muted small">Name this import (optional)</div>
+              <input
+                type="text"
+                className="input"
+                placeholder="e.g. NFL Mega Break — June 27"
+                value={importName}
+                onChange={(e) => setImportName(e.target.value)}
+              />
+              <div className="muted small">A label for what you’re sorting &amp; shipping. Shows in History › Import log.</div>
+            </div>
+
             <div className="row" style={{ marginTop: 14 }}>
+              {existing && existing.hasData && onCancel && (
+                <button className="btn btn-ghost" onClick={onCancel}>← Back to app</button>
+              )}
               <button className="btn" onClick={openPicker}>
                 {file ? 'Choose a different PDF' : 'Choose PDF…'}
               </button>

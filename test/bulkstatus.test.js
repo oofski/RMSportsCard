@@ -154,6 +154,23 @@ describe('bulkSetShipmentStatusByTracking — manual is truth', () => {
     }
   })
 
+  it('advances a human-set in_transit ("Sent" button) FORWARD to delivered on a scan', () => {
+    // Reported bug: the Orders queue "Sent"/"Done" button stamps a human
+    // in_transit ("I dropped it at the post office"). A later real delivery scan
+    // must be allowed to complete the row to delivered (-> stage all_good), not
+    // treat the human in_transit as a permanent freeze.
+    const ship = db.listShipments()[0]
+    db.setOrderStage(ship.id, 'sent', { username: 'alice' })
+    const mid = db.listShipments().find((s) => s.id === ship.id)
+    expect(mid.manualStatus.code).toBe('in_transit')
+    expect(mid.manualStatus.setBy).toBe('alice') // human-set
+
+    const res = db.bulkSetShipmentStatusByTracking({ [ship.trackingNumber]: 'delivered' }, { by: 'usps' })
+    const after = db.listShipments().find((s) => s.id === ship.id)
+    expect(after.manualStatus.code).toBe('delivered') // advanced forward, not stuck on Sent
+    expect(res.updated).toBe(1)
+  })
+
   it('ignores unknown status codes and unmatched tracking numbers', () => {
     const ship = db.listShipments()[0]
     const before = ship.manualStatus.code

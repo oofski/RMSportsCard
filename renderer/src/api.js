@@ -56,10 +56,11 @@ export const resetAdmin = () => request('/api/auth/reset-admin', { method: 'POST
 
 // ---- Parse / import -------------------------------------------------------
 // sport: 'auto' (detect NFL vs MLB from the PDF), or force 'nfl' / 'mlb'.
-export function uploadPdf(file, sport = 'auto') {
+export function uploadPdf(file, sport = 'auto', name = '') {
   const form = new FormData()
   form.append('file', file)
   form.append('sport', sport || 'auto')
+  if (name) form.append('name', name) // Import history label (item 3)
   return request('/api/parse', { method: 'POST', body: form, isForm: true })
 }
 export const parseStatus = (jobId) => request(`/api/parse/status/${jobId}`)
@@ -90,6 +91,7 @@ export const getTrackingNumbers = () => request('/api/shipments/tracking-numbers
 export const getOrders = () => request('/api/orders')
 export const setOrderStage = (id, stage) => request(`/api/orders/${id}/stage`, { method: 'PATCH', body: { stage } })
 export const setOrderHold = (id, onHold, reason) => request(`/api/orders/${id}/hold`, { method: 'PATCH', body: { onHold, reason } })
+export const setOrderSpecialRequest = (id, specialRequest) => request(`/api/orders/${id}/special-request`, { method: 'PATCH', body: { specialRequest } })
 export const moveOrder = (id, direction) => request(`/api/orders/${id}/move`, { method: 'PATCH', body: { direction } })
 export const resetQueue = () => request('/api/orders/reset-queue', { method: 'POST' })
 
@@ -116,6 +118,11 @@ export const clearLedger = () => request('/api/ledger', { method: 'DELETE' })
 export const saveSnapshot = (label) => request('/api/snapshots', { method: 'POST', body: { label } })
 export const listSnapshots = () => request('/api/snapshots')
 export const deleteSnapshot = (id) => request(`/api/snapshots/${id}`, { method: 'DELETE' })
+
+// Import history log (item 3)
+export const listImports = () => request('/api/imports')
+export const renameImport = (id, name) => request(`/api/imports/${id}`, { method: 'PATCH', body: { name } })
+export const deleteImport = (id) => request(`/api/imports/${id}`, { method: 'DELETE' })
 export const exportData = (kind, snapshotId) =>
   request(`/api/export/${kind}${snapshotId ? `?snapshot=${encodeURIComponent(snapshotId)}` : ''}`)
 

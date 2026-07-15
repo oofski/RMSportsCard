@@ -86,4 +86,39 @@ describe('orders queue', () => {
     const after = await (await api('/api/orders')).json()
     expect(after[0].id).toBe(second.id) // moved to the front
   })
+
+  it('can set Exception and Returned from the queue (dropdown offered them but the API used to 400)', async () => {
+    const id = (await (await api('/api/orders')).json())[3].id
+    let row = await (await api(`/api/orders/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: 'exception' }) })).json()
+    expect(row.stage).toBe('exception')
+    expect(row.manualStatus.code).toBe('exception')
+    row = await (await api(`/api/orders/${id}/stage`, { method: 'PATCH', body: JSON.stringify({ stage: 'returned' }) })).json()
+    expect(row.stage).toBe('returned')
+    expect(row.manualStatus.code).toBe('returned')
+  })
+
+  it('sets, persists (trimmed), and clears a per-order special request', async () => {
+    const id = (await (await api('/api/orders')).json())[4].id
+    let row = await (await api(`/api/orders/${id}/special-request`, {
+      method: 'PATCH', body: JSON.stringify({ specialRequest: '  Ship in a team bag  ' }),
+    })).json()
+    expect(row.specialRequest).toBeTruthy()
+    expect(row.specialRequest.text).toBe('Ship in a team bag') // trimmed
+    expect(row.specialRequest).toHaveProperty('setAt')
+
+    const again = (await (await api('/api/orders')).json()).find((o) => o.id === id)
+    expect(again.specialRequest.text).toBe('Ship in a team bag') // persisted
+
+    row = await (await api(`/api/orders/${id}/special-request`, {
+      method: 'PATCH', body: JSON.stringify({ specialRequest: '   ' }),
+    })).json()
+    expect(row.specialRequest).toBeNull() // whitespace clears it
+  })
+
+  it('404s a special request on an unknown order', async () => {
+    const r = await api('/api/orders/does-not-exist/special-request', {
+      method: 'PATCH', body: JSON.stringify({ specialRequest: 'x' }),
+    })
+    expect(r.status).toBe(404)
+  })
 })

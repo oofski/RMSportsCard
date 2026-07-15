@@ -29,6 +29,8 @@ module.exports = function parseRoutes({ db, requireAuth }) {
       // Sport picker: multer surfaces non-file text fields on req.body. 'auto'
       // (or absent) auto-detects the league (NFL / MLB / NBA) from the team names.
       const sport = (req.body && req.body.sport) || 'auto'
+      // Operator's free-text label for the Import history log (item 3).
+      const importName = (req.body && req.body.name) || ''
 
       const job = db.createParseJob({ filename: req.file.originalname, totalPages: 0 })
 
@@ -44,7 +46,7 @@ module.exports = function parseRoutes({ db, requireAuth }) {
               breaksFound: p.breaksFound || 0,
             }),
           })
-          db.importDataset(dataset, { filename: req.file.originalname })
+          db.importDataset(dataset, { filename: req.file.originalname, name: importName, sourceKind: 'pdf' })
           db.updateParseJob(job.id, {
             status: 'complete',
             pagesProcessed: dataset.totalPages || job.pagesProcessed,
@@ -88,7 +90,7 @@ module.exports = function parseRoutes({ db, requireAuth }) {
   router.post('/parse/demo', requireAuth, (_req, res, next) => {
     try {
       const { demoDataset } = require('../seed.cjs')
-      db.importDataset(demoDataset(), { filename: 'demo-data' })
+      db.importDataset(demoDataset(), { filename: 'demo-data', name: 'Demo data', sourceKind: 'demo' })
       res.json({ ok: true, summary: db.summary() })
     } catch (err) { next(err) }
   })

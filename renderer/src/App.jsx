@@ -150,7 +150,10 @@ export default function App() {
           />
           <main className="app-main">
             <div className="container">
-              <Upload onImported={refreshDataState} />
+              {/* onCancel lets a re-import ("Upload new") back out to the app without
+                  parsing. Upload only shows the Back button when the backend already
+                  has an event loaded, so this is inert on a genuine first run. */}
+              <Upload onImported={refreshDataState} onCancel={() => setHasData(true)} />
             </div>
           </main>
         </div>

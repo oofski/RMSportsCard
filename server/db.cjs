@@ -43,8 +43,16 @@ class Db {
   // ---------------------------------------------------------------------------
   // Import — load a freshly parsed dataset, preserving the user table.
   // ---------------------------------------------------------------------------
-  importDataset(dataset, { filename } = {}) {
+  importDataset(dataset, { filename, name, sourceKind } = {}) {
     const s = this.store.state
+    // Capture operator-owned state from the OUTGOING event BEFORE we overwrite it.
+    // A corrected Whatnot re-export carries none of the operator's progress, so
+    // without carrying it forward a re-import would silently reset every order to
+    // "To Pick" and wipe shipping statuses, notes, holds, queue order, checkoffs
+    // and special requests. We re-attach it by stable identity below.
+    const prevShipments = s.shipments || []
+    const prevSlots = s.teamSlots || []
+    const prevBreaks = s.breaks || []
     s.meta.importedAt = now()
     s.meta.event = dataset.event || { name: null, date: null }
     // Which league this import was parsed as ('nfl' | 'mlb' | 'nba'). Defaults to
@@ -58,9 +66,60 @@ class Db {
     s.batchUrls = dataset.batchUrls || []
     s.warnings = dataset.warnings || []
     s.breakAudit = dataset.breakAudit || []
+    this._carryForwardOperatorState(prevShipments, prevSlots, prevBreaks)
     if (filename) s.meta.lastImportFilename = filename
+    // Import history log: append a nameable record of THIS upload (item 3).
+    this._recordImport({ filename, name, sourceKind })
     this.store.saveNow()
     return this.summary()
+  }
+
+  /**
+   * Re-attach operator-owned state to freshly-parsed rows after a re-import, so a
+   * corrected re-export never wipes days of packing/shipping work. Matched by
+   * stable identity: shipments by customer handle; team slots by handle+break+team
+   * (duplicate team names consumed in order); break status by break number. Rows
+   * with no match (a new event / an added buyer) simply start fresh.
+   */
+  _carryForwardOperatorState(prevShipments, prevSlots, prevBreaks) {
+    const s = this.store.state
+    const shipByCustomer = new Map()
+    for (const sh of prevShipments) shipByCustomer.set(sh.customerId, sh)
+    for (const sh of s.shipments) {
+      const old = shipByCustomer.get(sh.customerId)
+      if (!old) continue
+      if (old.manualStatus) sh.manualStatus = old.manualStatus
+      if (old.notes != null) sh.notes = old.notes
+      if (old.onHold) { sh.onHold = true; sh.heldReason = old.heldReason || null }
+      if (old.specialRequest) sh.specialRequest = old.specialRequest
+      if (typeof old.queueOrder === 'number') sh.queueOrder = old.queueOrder
+      if (old.packedAt) { sh.packedAt = old.packedAt; sh.packedBy = old.packedBy || null }
+      if (old.lastUpdated) sh.lastUpdated = old.lastUpdated
+    }
+    const slotKey = (t) => `${t.customerId}|${t.breakNumber}|${String(t.teamName).toLowerCase()}`
+    const slotsByKey = new Map()
+    for (const t of prevSlots) {
+      const k = slotKey(t)
+      if (!slotsByKey.has(k)) slotsByKey.set(k, [])
+      slotsByKey.get(k).push(t)
+    }
+    for (const t of s.teamSlots) {
+      const bucket = slotsByKey.get(slotKey(t))
+      if (!bucket || !bucket.length) continue
+      const old = bucket.shift()
+      t.checkedOff = !!old.checkedOff
+      t.checkedOffAt = old.checkedOffAt || null
+      t.checkedOffBy = old.checkedOffBy || null
+      if (old.topSleeved) t.topSleeved = true
+    }
+    const statusByBreakNumber = new Map()
+    for (const b of prevBreaks) statusByBreakNumber.set(b.breakNumber, b.status)
+    for (const b of s.breaks) {
+      const st = statusByBreakNumber.get(b.breakNumber)
+      // Keep a packed/shipped break as-is; otherwise re-derive from carried checkoffs.
+      if (st === 'packed' || st === 'shipped') b.status = st
+      else this._recomputeBreakStatus(b.id)
+    }
   }
 
   /** Post-parse summary shown on the landing screen (spec §5.6). */
@@ -212,10 +271,11 @@ class Db {
     if (!b) return
     const slots = s.teamSlots.filter((t) => t.breakId === breakId)
     const checked = slots.filter((t) => t.checkedOff).length
-    if (b.status === 'shipped') return
-    if (checked === 0) b.status = 'pending'
-    else if (slots.length > 0 && checked >= slots.length) b.status = b.status === 'packed' ? 'packed' : 'picking'
-    else b.status = 'picking'
+    // Never silently downgrade an explicit packed/shipped break when checkoffs
+    // change (e.g. the operator unchecks a card to review, or hits Clear All).
+    // Un-packing is a deliberate action, not a side effect of editing checks.
+    if (b.status === 'shipped' || b.status === 'packed') return
+    b.status = checked === 0 ? 'pending' : 'picking'
   }
 
   // ---------------------------------------------------------------------------
@@ -426,7 +486,15 @@ class Db {
       // ...EXCEPT a genuine carrier scan may advance a human pre-ship row forward
       // (e.g. a packed "not_shipped" order that has now actually shipped).
       const forwardFromPreship = PRESHIP.includes(cur.code) && CARRIER.includes(code)
-      if (humanSet && !forwardFromPreship) { kept += 1; continue }
+      // ...AND a carrier scan may advance a human-set IN-TRANSIT row strictly
+      // FORWARD along real carrier progress. The Orders queue "Sent"/"Done" button
+      // stamps a human in_transit ("I dropped it at the post office") — that is not
+      // "freeze this row", so a later "delivered" scan must be allowed to complete
+      // it. Rank makes the move one-directional: an auto scan can never regress a
+      // human-confirmed delivered/returned/exception (all rank 4).
+      const RANK = { not_shipped: 0, label_created: 1, in_transit: 2, out_for_delivery: 3, delivered: 4, exception: 4, returned: 4 }
+      const forwardScan = AUTO_SETTERS.includes(by) && (RANK[code] ?? -1) > (RANK[cur.code] ?? -1)
+      if (humanSet && !forwardFromPreship && !forwardScan) { kept += 1; continue }
       sh.manualStatus = { code, setAt: now(), setBy: by }
       sh.lastUpdated = now()
       updated += 1
@@ -452,6 +520,7 @@ class Db {
   //   returned/exception            -> that stage
   //   delivered                     -> all_good
   //   in_transit/out_for_delivery   -> sent
+  //   label_created                 -> put_together (a printed label = packed/ready)
   //   not_shipped + packedAt set    -> put_together
   //   not_shipped + not packed      -> to_pick
   // ---------------------------------------------------------------------------
@@ -461,6 +530,10 @@ class Db {
     if (code === 'exception') return 'exception'
     if (code === 'delivered') return 'all_good'
     if (code === 'in_transit' || code === 'out_for_delivery') return 'sent'
+    // A created shipping label means the package is packed and ready to ship —
+    // never show it back in the "To Pick" pile (it would disagree with the
+    // Shipping Tracker, which reads "Label Created").
+    if (code === 'label_created') return 'put_together'
     return sh.packedAt ? 'put_together' : 'to_pick'
   }
 
@@ -495,6 +568,8 @@ class Db {
       serviceType: sh.serviceType,
       uspsUrl: sh.uspsUrl,
       notes: sh.notes || null,
+      // Per-order special request ({ text, setAt, setBy } or null) — item 2.
+      specialRequest: sh.specialRequest || null,
       manualStatus: sh.manualStatus || { code: 'not_shipped', setAt: null, setBy: null },
       stage: this._deriveStage(sh),
       onHold: !!sh.onHold,
@@ -554,6 +629,15 @@ class Db {
         sh.packedAt = sh.packedAt || ts
         sh.manualStatus = { code: 'delivered', setAt: ts, setBy: by }
         break
+      // Exception / Returned are offered in the Orders status dropdown and are
+      // real (derivable) stages; without these cases the switch threw a 400 and
+      // an operator could never mark a returned/damaged package from the queue.
+      case 'exception':
+        sh.manualStatus = { code: 'exception', setAt: ts, setBy: by }
+        break
+      case 'returned':
+        sh.manualStatus = { code: 'returned', setAt: ts, setBy: by }
+        break
       default:
         throw Object.assign(new Error(`Invalid stage: ${stage}`), { status: 400 })
     }
@@ -568,6 +652,25 @@ class Db {
     if (!sh) return null
     sh.onHold = !!onHold
     sh.heldReason = onHold ? (reason || null) : null
+    sh.lastUpdated = now()
+    this.store.saveNow()
+    return this._orderRow(sh)
+  }
+
+  /**
+   * Set or clear a per-order SPECIAL REQUEST (e.g. "ship in a team bag"). Shown
+   * pinned at the top of the order card, which glows red so the packer can't miss
+   * it. An empty/whitespace value clears it. Stored as { text, setAt, setBy } (or
+   * null) — parity with manualStatus/heldReason. It is a per-event operator note;
+   * a re-import carries it forward for matching customers (see importDataset).
+   */
+  setOrderSpecialRequest(shipmentId, specialRequest, user) {
+    const sh = this.store.state.shipments.find((x) => x.id === shipmentId)
+    if (!sh) return null
+    const text = typeof specialRequest === 'string' ? specialRequest.trim() : ''
+    sh.specialRequest = text
+      ? { text, setAt: now(), setBy: (user && user.username) || null }
+      : null
     sh.lastUpdated = now()
     this.store.saveNow()
     return this._orderRow(sh)
@@ -760,6 +863,59 @@ class Db {
 
   // ---------------------------------------------------------------------------
   // Settings
+  // ---------------------------------------------------------------------------
+  // Import history log (item 3) — one nameable entry per dataset upload so the
+  // operator can track "what we sorted and shipped" over time.
+  // ---------------------------------------------------------------------------
+  /** Append a history entry describing the dataset that was just imported. */
+  _recordImport({ filename, name, sourceKind } = {}) {
+    const s = this.store.state
+    if (!Array.isArray(s.imports)) s.imports = []
+    const entry = {
+      id: `imp_${crypto.randomBytes(5).toString('hex')}`,
+      importedAt: now(),
+      kind: sourceKind || 'pdf', // 'pdf' | 'shipping' | 'demo'
+      name: (name && String(name).trim()) || '',
+      filename: filename || null,
+      event: { name: s.meta.event.name, date: s.meta.event.date },
+      sport: s.meta.sport || 'nfl',
+      counts: {
+        customers: s.customers.length,
+        breaks: s.breaks.length,
+        orders: s.orders.length,
+        shipments: s.shipments.length,
+        giveaways: s.orders.filter((o) => o.isGiveaway).length,
+      },
+    }
+    s.imports.unshift(entry) // newest first
+    return entry
+  }
+
+  /** Metadata list of all imports (newest first). */
+  listImports() {
+    return (this.store.state.imports || []).map((i) => ({ ...i }))
+  }
+
+  /** Rename an import entry ("what we are sorting and shipping"). */
+  renameImport(id, name) {
+    const entry = (this.store.state.imports || []).find((x) => x.id === id)
+    if (!entry) return null
+    entry.name = (name && String(name).trim()) || ''
+    this.store.saveNow()
+    return { ...entry }
+  }
+
+  /** Remove an import entry from the log (does NOT touch the live dataset). */
+  deleteImport(id) {
+    const s = this.store.state
+    if (!Array.isArray(s.imports)) return { ok: false }
+    const idx = s.imports.findIndex((x) => x.id === id)
+    if (idx === -1) return { ok: false }
+    s.imports.splice(idx, 1)
+    this.store.saveNow()
+    return { ok: true }
+  }
+
   // ---------------------------------------------------------------------------
   // ---------------------------------------------------------------------------
   // History — daily snapshots of order + shipping data, and CSV export

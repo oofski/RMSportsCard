@@ -38,9 +38,12 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   const [filter, setFilter] = useState('all') // all | <stage> | held | flagged
   const [search, setSearch] = useState('')
   const [breakFilter, setBreakFilter] = useState(initialBreakFilter) // null = all breaks; else a break number
-  const [expanded, setExpanded] = useState(() => new Set())
+  // Orders are EXPANDED by default; this Set holds the ids the user has
+  // individually COLLAPSED. New/reloaded orders (never in the Set) show open.
+  const [collapsed, setCollapsed] = useState(() => new Set())
   const [toast, setToast] = useState('')
   const [tracking, setTracking] = useState(null) // { done, total } while scanning
+  const [specialEdit, setSpecialEdit] = useState(null) // { id, text } while editing a special request
 
   const load = useCallback(async () => {
     try {
@@ -95,6 +98,30 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
     } catch (err) { flash(err.message || 'Could not change hold') }
   }, [replaceRow, flash])
 
+  // ---- Special request (red-highlighted note pinned to the top of an order) --
+  const startSpecial = useCallback((order) => {
+    setSpecialEdit({ id: order.id, text: order.specialRequest ? order.specialRequest.text : '' })
+  }, [])
+
+  const saveSpecial = useCallback(async (order) => {
+    const text = specialEdit && specialEdit.id === order.id ? specialEdit.text : ''
+    try {
+      const row = await api.setOrderSpecialRequest(order.id, text)
+      replaceRow(row)
+      setSpecialEdit(null)
+      flash(text.trim() ? 'Special request saved' : 'Special request cleared')
+    } catch (err) { flash(err.message || 'Could not save special request') }
+  }, [specialEdit, replaceRow, flash])
+
+  const clearSpecial = useCallback(async (order) => {
+    try {
+      const row = await api.setOrderSpecialRequest(order.id, '')
+      replaceRow(row)
+      setSpecialEdit((prev) => (prev && prev.id === order.id ? null : prev))
+      flash('Special request cleared')
+    } catch (err) { flash(err.message || 'Could not clear special request') }
+  }, [replaceRow, flash])
+
   // ---- Move up / down in the queue ----------------------------------------
   const move = useCallback(async (order, direction) => {
     try {
@@ -107,7 +134,7 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   // Because the active filter usually excludes the next stage, the finished
   // order drops out of view automatically — no need to keep the whole thing open.
   const markDone = useCallback(async (order) => {
-    setExpanded((prev) => { const n = new Set(prev); n.delete(order.id); return n })
+    setCollapsed((prev) => { const n = new Set(prev); n.add(order.id); return n })
     await setStage(order, nextStageCode(order.stage))
   }, [setStage])
 
@@ -206,7 +233,7 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   // "By break" selector.
   const allBreaks = useMemo(() => {
     const s = new Set()
-    orders.forEach((o) => (o.breaks || []).forEach((b) => s.add(b.breakNumber)))
+    orders.forEach((o) => (o.breaks || []).forEach((b) => { if (b.breakNumber != null) s.add(b.breakNumber) }))
     return [...s].sort((a, b) => a - b)
   }, [orders])
 
@@ -226,11 +253,16 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   const inBreak = breakFilter != null ? visible.filter((o) => soleBreakOf(o) === breakFilter) : []
   const others = breakFilter != null ? visible.filter((o) => soleBreakOf(o) !== breakFilter) : []
 
-  const toggleExpand = (id) => setExpanded((prev) => {
+  const toggleExpand = (id) => setCollapsed((prev) => {
     const n = new Set(prev)
     n.has(id) ? n.delete(id) : n.add(id)
     return n
   })
+  // Global controls. Expand-all clears the Set; collapse-all seeds it with every
+  // loaded order id. `allExpanded` drives the single toggle button's label.
+  const expandAll = () => setCollapsed(new Set())
+  const collapseAll = () => setCollapsed(new Set(orders.map((o) => o.id)))
+  const allExpanded = collapsed.size === 0
 
   if (loading) return <div className="muted">Loading orders…</div>
   if (error) return <div className="banner error" style={{ borderRadius: 8 }}>{error}</div>
@@ -251,7 +283,7 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   const orderRow = (o, idx, list) => {
     const flagged = FLAGGED.has(o.stage)
     const sd = stageByCode[o.stage] || {}
-    const isExpanded = expanded.has(o.id)
+    const isExpanded = !collapsed.has(o.id)
     const pct = o.pick.total ? Math.round((o.pick.checked / o.pick.total) * 100) : 0
     const focusBreak = breakFilter != null ? (o.breaks || []).find((b) => b.breakNumber === breakFilter) : null
     // Giveaway-only package: the customer bought nothing, they only won a
@@ -259,8 +291,46 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
     // badges apply to it, so without its own flag it looks like an empty order —
     // this makes the promo-only shipment impossible to miss.
     const giveawayOnly = o.hasGiveaway && o.cardCount > 0 && o.giveawayCount >= o.cardCount
+    const editingSpecial = specialEdit && specialEdit.id === o.id
+    // Move up/down are swapped within the order's hold group by the backend, so
+    // gate the arrows on position WITHIN that group (not the mixed visible list),
+    // otherwise the last active order's ↓ and the first held order's ↑ are dead.
+    const group = list.filter((x) => !!x.onHold === !!o.onHold)
+    const gi = group.indexOf(o)
     return (
-      <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
+      <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.specialRequest ? 'special' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
+        {/* Special request pinned at the TOP of the order — the whole card glows
+            red so the packer cannot miss it. Sibling of .order-row-main (not
+            inside it) so editing never toggles the card open/closed. */}
+        {(o.specialRequest || editingSpecial) && (
+          <div className="special" onClick={(e) => e.stopPropagation()}>
+            <span className="special-label">★ Special request</span>
+            {editingSpecial ? (
+              <div className="special-editor">
+                <input
+                  className="input"
+                  autoFocus
+                  value={specialEdit.text}
+                  placeholder="e.g. Ship in a team bag, add extra penny sleeves"
+                  onChange={(e) => setSpecialEdit({ id: o.id, text: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); saveSpecial(o) }
+                    else if (e.key === 'Escape') { e.preventDefault(); setSpecialEdit(null) }
+                  }}
+                />
+                <button className="btn btn-sm btn-primary" onClick={() => saveSpecial(o)}>Save</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => setSpecialEdit(null)}>Cancel</button>
+              </div>
+            ) : (
+              <div className="special-view">
+                <span className="special-text">{o.specialRequest.text}</span>
+                <span className="spacer" />
+                <button className="btn btn-sm btn-ghost" onClick={() => startSpecial(o)}>Edit</button>
+                <button className="btn btn-sm btn-ghost" onClick={() => clearSpecial(o)}>Clear</button>
+              </div>
+            )}
+          </div>
+        )}
         {/* Collapsed row — tap anywhere to drop down the team checklist. */}
         <div
           className="order-row-main"
@@ -339,17 +409,17 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
         {/* Drop-down: per-break team CHECKLIST + tucked secondary actions. */}
         {isExpanded && (
           <div className="order-row-detail">
-            {o.breaks.length === 0 && <div className="muted small">No teams on this order (giveaway-only).</div>}
+            {o.breaks.length === 0 && <div className="muted small">No cards on this order.</div>}
             {o.breaks.map((b) => {
               const done = b.teams.filter((t) => t.checkedOff).length
               const complete = b.teams.length > 0 && done >= b.teams.length
               const sleeved = b.teams.filter((t) => t.topSleeved).length
               const isFocus = breakFilter != null && b.breakNumber === breakFilter
               return (
-                <div key={b.breakNumber} className="break-group">
+                <div key={b.breakNumber == null ? 'giveaway' : b.breakNumber} className="break-group">
                   <div className="bk">
                     <span className="row" style={{ gap: 8, alignItems: 'center' }}>
-                      Break #{b.breakNumber}
+                      {b.breakNumber == null ? '🎁 Giveaway' : `Break #${b.breakNumber}`}
                       {isFocus && <span className="badge" style={{ padding: '0 6px' }}>selected</span>}
                       {sleeved > 0 && <span className="badge sleeve small" title={`${sleeved} top-sleeved in this break`}>🛡 {sleeved}</span>}
                     </span>
@@ -375,9 +445,12 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
             <div className="order-detail-actions">
               {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
               <span className="spacer" />
+              <button className="btn btn-sm btn-ghost" onClick={() => startSpecial(o)} title="Add a red special-request note pinned to the top of this order">
+                {o.specialRequest ? 'Edit request' : 'Special request'}
+              </button>
               <button className="btn btn-sm btn-ghost" onClick={() => toggleHold(o)}>{o.onHold ? 'Resume' : 'Hold'}</button>
-              <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filters to reorder'} aria-label="Move up">↑</button>
-              <button className="btn btn-sm btn-ghost" disabled={!reorderable || idx === list.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filters to reorder'} aria-label="Move down">↓</button>
+              <button className="btn btn-sm btn-ghost" disabled={!reorderable || gi === 0} onClick={() => move(o, 'up')} title={reorderable ? 'Move up' : 'Clear filters to reorder'} aria-label="Move up">↑</button>
+              <button className="btn btn-sm btn-ghost" disabled={!reorderable || gi === group.length - 1} onClick={() => move(o, 'down')} title={reorderable ? 'Move down' : 'Clear filters to reorder'} aria-label="Move down">↓</button>
               {o.trackingNumber && <button className="btn btn-sm btn-ghost" onClick={() => api.openExternal(o.uspsUrl)} aria-label="Open USPS tracking">USPS</button>}
               <select className="select select-sm" value={o.stage} onChange={(e) => setStage(o, e.target.value)} aria-label="Set status" title="Set status">
                 {ORDER_STAGES.map((s) => <option key={s.code} value={s.code}>{s.label}</option>)}
@@ -395,6 +468,13 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
         <h2 style={{ margin: 0 }}>Orders</h2>
         <div className="row" style={{ gap: 8 }}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={allExpanded ? collapseAll : expandAll}
+            title={allExpanded ? 'Collapse every order' : 'Expand every order'}
+          >
+            {allExpanded ? 'Collapse all' : 'Expand all'}
+          </button>
           <button className="btn btn-sm btn-ghost" onClick={resetQueue} title="Reset the manual queue order back to default">
             Reset queue
           </button>

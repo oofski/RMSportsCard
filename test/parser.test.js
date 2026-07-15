@@ -180,6 +180,74 @@ describe('parsePages', () => {
     expect(ds.warnings).toEqual([])
   })
 
+  it('makes a package that is JUST a giveaway a checkable slot (no break, no breaking slip)', () => {
+    const pages = [`Whatnot Packing Slip
+1/1
+To: promowinner
+From: rm_cardz
+Jane Doe
+5 Main St
+Springfield, IL 62704
+COSMIC FOOTBALL MARATHON June 27, 2026
+Order 999001
+GIVEAWAY 1x MYSTERY BOX $0.00
+1 Items
+USPS Ground Advantage® #9400110200881234567890
+4.0 oz`]
+    const out = parsePages(pages, { sport: 'nfl' })
+    const slots = out.teamSlots.filter((t) => t.customerId === 'promowinner')
+    // The promo is now a real, checkable team slot instead of an empty order.
+    expect(slots).toHaveLength(1)
+    expect(slots[0].isGiveaway).toBe(true)
+    expect(slots[0].price).toBe(0)
+    expect(slots[0].teamName).toBe('Giveaway')
+    expect(slots[0].breakNumber).toBe(null)
+    expect(slots[0].orderId).toBe('999001')
+    // Still shipped, and no phantom Break record fabricated for the break-less promo.
+    expect(out.shipments.find((s) => s.customerId === 'promowinner')).toBeTruthy()
+    expect(out.breaks.some((b) => b.breakNumber == null)).toBe(false)
+  })
+
+  it('keeps a giveaway the breaking slip omits as its own checkable slot in that break', () => {
+    const pages = [`Whatnot Packing Slip
+1/1
+To: mixbuyer
+From: rm_cardz
+Sam Ray
+9 Oak St
+Dublin, OH 43017
+COSMIC FOOTBALL MARATHON June 27, 2026
+Order 800001
+1x COSMIC CHROME FOOTBALL Break #2 Chicago Bears $30.00
+Order 800002
+GIVEAWAY 1x COSMIC CHROME FOOTBALL Break #2 Arizona Cardinals $0.00
+2 Items
+USPS Priority Mail® #9305520762601281834777
+10.0 oz`,
+`Whatnot - Breaking Slip
+User
+Sam Ray (mixbuyer)
+#800001 #800002
+1 Breaks
+Break #2
+Orders: #800001 #800002
+__ Chicago Bears
+Total: $30.00`]
+    const out = parsePages(pages, { sport: 'nfl' })
+    const slots = out.teamSlots.filter((t) => t.customerId === 'mixbuyer')
+    // Paid Bears + the giveaway Cardinals the breaking slip never listed (would
+    // previously have been silently dropped from the pick list entirely).
+    expect(slots).toHaveLength(2)
+    const gv = slots.find((t) => t.isGiveaway)
+    expect(gv).toBeTruthy()
+    expect(gv.teamName).toBe('Arizona Cardinals')
+    expect(gv.breakNumber).toBe(2)
+    expect(gv.orderId).toBe('800002')
+    const bears = slots.find((t) => !t.isGiveaway)
+    expect(bears.teamName).toBe('Chicago Bears')
+    expect(bears.price).toBe(30)
+  })
+
   it('emits a warning for a duplicate team in the same break', () => {
     const dupPages = [
       `Whatnot - Breaking Slip

@@ -25,7 +25,7 @@ const team = (slotId, name, opts = {}) => ({
 
 // A synthetic order row; the multi-card / giveaway / sleeve counts are derived
 // from the team slots exactly as the backend derives them.
-function order(id, name, handle, breaks) {
+function order(id, name, handle, breaks, specialRequest = null) {
   const slots = breaks.flatMap((b) => b.teams)
   const cardCount = slots.length
   const giveawayCount = slots.filter((t) => t.isGiveaway).length
@@ -37,6 +37,7 @@ function order(id, name, handle, breaks) {
     serviceType: 'Priority',
     uspsUrl: 'https://example.test/' + id,
     notes: null,
+    specialRequest,
     manualStatus: { code: 'not_shipped', setAt: null, setBy: null },
     stage: 'to_pick',
     onHold: false,
@@ -57,7 +58,9 @@ function order(id, name, handle, breaks) {
 
 const ORDERS = [
   // Solely in break 9 (a paid card) → belongs in the "Only in Break #9" group.
-  order('a', 'Alice Alpha', 'alice', [{ breakNumber: 9, teams: [team('s1', 'Dallas Cowboys')] }]),
+  // Also carries a special request → red banner pinned to the top of the card.
+  order('a', 'Alice Alpha', 'alice', [{ breakNumber: 9, teams: [team('s1', 'Dallas Cowboys')] }],
+    { text: 'Ship in a team bag', setAt: '2026-07-01T00:00:00.000Z', setBy: 'owner' }),
   // Solely in break 2 → "Other orders" when break 9 is selected.
   order('b', 'Bob Beta', 'bob', [{ breakNumber: 2, teams: [team('s2', 'Chicago Bears')] }]),
   // Spans breaks 9 AND 10 → must NOT appear in the solely-9 group.
@@ -80,6 +83,18 @@ describe('OrderQueue renders', () => {
     expect(html).toContain('All breaks')       // the by-break selector
     expect(html).toContain('Break #9')          // an option for the derived break
     expect(html).toContain('Giveaway only')     // Dave's giveaway-only flag
+    expect(html).toContain('Collapse all')      // the expand/collapse-all toggle (default expanded)
+  })
+
+  it('expands orders by default and pins a special request at the top', () => {
+    const html = renderToStaticMarkup(<OrderQueue initialOrders={ORDERS} />)
+    // Team chips live in the drop-down detail; their presence in flat view (with
+    // no click) proves orders render EXPANDED by default (item 1).
+    expect(html).toContain('Dallas Cowboys')
+    expect(html).toContain('Green Bay Packers')
+    // The special request banner + its text render red-pinned above the order (item 2).
+    expect(html).toContain('Special request')
+    expect(html).toContain('Ship in a team bag')
   })
 
   it('groups "solely in the break" — multi-break orders are excluded', () => {

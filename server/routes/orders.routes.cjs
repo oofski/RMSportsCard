@@ -4,6 +4,7 @@
 //   GET   /api/orders               -> per-order (per-package) queue rows
 //   PATCH /api/orders/:id/stage     -> advance/revert  { stage }
 //   PATCH /api/orders/:id/hold      -> pause/resume     { onHold, reason? }
+//   PATCH /api/orders/:id/special-request -> set/clear  { specialRequest }
 //   PATCH /api/orders/:id/move      -> reorder queue    { direction: 'up'|'down' }
 //
 // Picking individual teams still uses PATCH /api/teamslot/:id (shared with the
@@ -36,6 +37,12 @@ module.exports = function orderRoutes({ db, requireAuth }) {
   router.patch('/orders/:id/hold', requireAuth, (req, res) => {
     const { onHold, reason } = req.body || {}
     const row = db.setOrderHold(req.params.id, !!onHold, reason, req.user)
+    if (!row) return res.status(404).json({ error: 'Order not found' })
+    res.json(row)
+  })
+
+  router.patch('/orders/:id/special-request', requireAuth, (req, res) => {
+    const row = db.setOrderSpecialRequest(req.params.id, req.body && req.body.specialRequest, req.user)
     if (!row) return res.status(404).json({ error: 'Order not found' })
     res.json(row)
   })

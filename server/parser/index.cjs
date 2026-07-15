@@ -608,6 +608,10 @@ function parsePages(pages, { onProgress, sport } = {}) {
     }
 
     // --- Emit breaks, team slots and orders ----------------------------------
+    // Track which packing-slip orders a team slot has already "consumed" (by
+    // reference) so the giveaway sweep below can tell which giveaways were never
+    // turned into a slot and therefore still need one.
+    const consumedPacks = new Set()
     for (const spec of breakSpecs) {
       const n = spec.breakNumber
       breakNumbers.add(n)
@@ -651,6 +655,7 @@ function parsePages(pages, { onProgress, sport } = {}) {
           if (idx >= 0) pack = packOrders.splice(idx, 1)[0]
         }
         if (!pack && packOrders.length) pack = packOrders.shift()
+        if (pack) consumedPacks.add(pack)
 
         const orderId = (pack && pack.orderId) || spec.orderIds[i] || spec.orderIds[0] || null
         const isGiveaway = pack ? !!pack.isGiveaway : false
@@ -696,8 +701,50 @@ function parsePages(pages, { onProgress, sport } = {}) {
       }
     }
 
-    // A giveaway-only / zero-break customer still produced Customer + Shipment
-    // records above (no team slots/orders), satisfying the spec.
+    // --- Giveaways no break slot claimed -> their own checkable team slot -----
+    // A giveaway card the breaking slip never lists as a checkbox team — a promo
+    // rider on a paid package, or a package that is JUST a giveaway — is a real
+    // physical card that still has to be pulled, bagged and shipped. If we leave
+    // it off the team-slot list it vanishes from the pick detail: nothing to
+    // check off, and a giveaway-only package renders as an empty order ("No teams
+    // on this order"). So emit a REAL team slot (isGiveaway=true, price 0) for
+    // every giveaway packing order that no slot above consumed. A giveaway tied
+    // to a break groups under it; a break-less promo keeps breakNumber null (it
+    // belongs to no break) and never fabricates a phantom Break record.
+    let giveawaySeq = 0
+    for (const o of packing.orders) {
+      if (!o.isGiveaway || consumedPacks.has(o)) continue
+      const n = o.breakNumber != null ? o.breakNumber : null
+      const breakId = n != null ? 'break_' + n : `giveaway_${handle}`
+      if (n != null) breakNumbers.add(n)
+      const teamName = o.team || 'Giveaway'
+      const key = `g${giveawaySeq++}`
+      teamSlots.push({
+        id: `slot_${n != null ? n : 'g'}_${handle}_${key}`,
+        breakId,
+        breakNumber: n,
+        teamName,
+        customerId: handle,
+        orderId: o.orderId || null,
+        price: 0,
+        isGiveaway: true,
+        checkedOff: false,
+        checkedOffAt: null,
+        checkedOffBy: null,
+      })
+      orders.push({
+        id: `order_${n != null ? n : 'g'}_${handle}_${key}`,
+        customerId: handle,
+        breakId,
+        breakNumber: n,
+        teamName,
+        price: 0,
+        isGiveaway: true,
+      })
+    }
+
+    // A customer with a shipment but genuinely no cards (not even a giveaway)
+    // still produced Customer + Shipment records above, satisfying the spec.
 
     customersProcessed += 1
     if (typeof onProgress === 'function') {

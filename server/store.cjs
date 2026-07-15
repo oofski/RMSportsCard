@@ -40,6 +40,10 @@ function emptyState() {
     // slate — 32 NFL / 30 MLB — missing teams, one-team-per-break collisions).
     // See server/parser/index.cjs. Surfaced read-only in the Checker tab.
     breakAudit: [],
+    // Import history log (item 3) — one nameable entry per dataset upload
+    // (PDF / shipping doc / demo). The operator names "what we are sorting and
+    // shipping". Persists across re-imports, like snapshots and the user table.
+    imports: [],
     // Saved daily snapshots of order + shipping data (History tab). Persist
     // across PDF re-imports, like the user table.
     snapshots: [],

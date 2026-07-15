@@ -22,6 +22,7 @@ function when(iso) {
 
 export default function History({ currentUser }) {
   const [snapshots, setSnapshots] = useState([])
+  const [imports, setImports] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -42,8 +43,11 @@ export default function History({ currentUser }) {
 
   const load = useCallback(async () => {
     try {
-      const data = await api.listSnapshots()
-      if (mounted.current) setSnapshots(Array.isArray(data) ? data : [])
+      const [snaps, imps] = await Promise.all([api.listSnapshots(), api.listImports()])
+      if (mounted.current) {
+        setSnapshots(Array.isArray(snaps) ? snaps : [])
+        setImports(Array.isArray(imps) ? imps : [])
+      }
     } catch (err) {
       if (mounted.current) setError(err.message || 'Failed to load history')
     } finally {
@@ -93,6 +97,26 @@ export default function History({ currentUser }) {
     }
   }, [load, flash])
 
+  // Import log (item 3): rename / delete a log entry (the live event is untouched).
+  const renameImportEntry = useCallback(async (imp) => {
+    const name = window.prompt('Name this import (what you’re sorting & shipping):', imp.name || '')
+    if (name === null) return
+    try {
+      await api.renameImport(imp.id, name)
+      await load()
+      flash('Import renamed')
+    } catch (err) { flash(err.message || 'Could not rename') }
+  }, [load, flash])
+
+  const removeImportEntry = useCallback(async (imp) => {
+    if (!window.confirm(`Delete this import log entry${imp.name ? ` "${imp.name}"` : ''}? This only removes the log entry, not your current data.`)) return
+    try {
+      await api.deleteImport(imp.id)
+      await load()
+      flash('Import entry deleted')
+    } catch (err) { flash(err.message || 'Could not delete') }
+  }, [load, flash])
+
   if (loading) return <div className="muted">Loading history…</div>
   if (error) return <div className="banner error" style={{ borderRadius: 8 }}>{error}</div>
 
@@ -113,6 +137,56 @@ export default function History({ currentUser }) {
         <p className="muted small" style={{ margin: 0 }}>
           Saves a spreadsheet of the current event to your computer. Use “Save today’s snapshot” to keep a dated copy you can revisit and re-export later.
         </p>
+      </div>
+
+      {/* Import log (item 3) — a nameable record of every PDF/shipping upload. */}
+      <div>
+        <div className="section-title">Import log</div>
+        <div className="panel">
+          {imports.length === 0 ? (
+            <div style={{ padding: 16 }} className="muted">No imports yet. Each PDF you upload adds a named entry here so you can track what you sorted and shipped.</div>
+          ) : (
+            <table className="grid">
+              <thead>
+                <tr>
+                  <th>Imported</th>
+                  <th>Name</th>
+                  <th>Source</th>
+                  <th style={{ textAlign: 'right' }}>Customers</th>
+                  <th style={{ textAlign: 'right' }}>Breaks</th>
+                  <th style={{ textAlign: 'right' }}>Orders</th>
+                  <th style={{ textAlign: 'right' }}>Shipments</th>
+                  <th style={{ textAlign: 'right' }}>Giveaways</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {imports.map((imp) => (
+                  <tr key={imp.id}>
+                    <td className="small">{when(imp.importedAt)}</td>
+                    <td>
+                      <strong>{imp.name || <span className="muted">Unnamed import</span>}</strong>
+                      {imp.event && imp.event.name && <span className="muted small"> · {imp.event.name}</span>}
+                      {imp.filename && <div className="muted small mono">{imp.filename}</div>}
+                    </td>
+                    <td><span className="badge">{imp.kind}</span></td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{(imp.counts && imp.counts.customers) || 0}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{(imp.counts && imp.counts.breaks) || 0}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{(imp.counts && imp.counts.orders) || 0}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{(imp.counts && imp.counts.shipments) || 0}</td>
+                    <td className="mono" style={{ textAlign: 'right' }}>{(imp.counts && imp.counts.giveaways) || 0}</td>
+                    <td>
+                      <div className="row" style={{ gap: 6 }}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => renameImportEntry(imp)}>Rename</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => removeImportEntry(imp)}>Delete</button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </div>
 
       {/* Saved snapshots */}
