@@ -87,6 +87,28 @@ function createTeamMatcher(sport) {
     const exact = keyToCanonical.get(key)
     if (exact) return { team: exact, exact: true, distance: 0 }
 
+    // Trailing-phrase (city-prefix / relocation) match: accept a candidate whose
+    // LAST words are exactly a canonical team — "Oakland Athletics" (or
+    // "Sacramento Athletics") -> "Athletics", "the Dallas Cowboys" -> "Dallas
+    // Cowboys". Take the LONGEST canonical suffix so a full 2-word name wins over
+    // a shorter accidental match; skip on an ambiguous same-length tie. This
+    // fixes a real Whatnot export ("Oakland Athletics") that the edit-distance-2
+    // fuzzy fallback can't reach (8 chars away from the bare "Athletics").
+    const words = key.split(' ')
+    let suffixBest = null
+    let suffixLen = 0
+    let suffixTie = false
+    for (const canon of CANONICAL) {
+      const cw = normalizeKey(canon).split(' ')
+      if (cw.length >= words.length || cw.length === 0) continue // need a strict prefix trimmed off
+      const tail = words.slice(words.length - cw.length).join(' ')
+      if (tail === cw.join(' ')) {
+        if (cw.length > suffixLen) { suffixLen = cw.length; suffixBest = canon; suffixTie = false }
+        else if (cw.length === suffixLen && canon !== suffixBest) { suffixTie = true }
+      }
+    }
+    if (suffixBest && !suffixTie) return { team: suffixBest, exact: false, distance: 0 }
+
     // Fuzzy fallback — nearest canonical team within edit distance 2.
     let best = null
     let bestDist = Infinity

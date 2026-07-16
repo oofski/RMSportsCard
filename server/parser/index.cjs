@@ -43,6 +43,30 @@ function toLines(page) {
     .filter((l) => l.length > 0)
 }
 
+// A breaking-slip section header can WRAP so the product title ends on the word
+// "Break" and its "#N" number falls to the NEXT line — e.g.
+//     "1x 2026 FINEST BASEBALL HOBBY BOX (NEW RELEASE!)- Break"
+//     "#1"
+// which splits "Break #N" across two lines so BREAK_HEADER matches neither and
+// the whole break — plus its "__ Team" list — is silently dropped (we then fall
+// back to the noisy packing slip). Rejoin a line ending in the word "Break" with
+// a following line that starts with a SMALL "#N" (1–3 digits) so a 10-digit
+// order-id line ("#1187236279") is never mistaken for a break number.
+function stitchWrappedBreakHeaders(lines) {
+  const out = []
+  for (let i = 0; i < lines.length; i++) {
+    const cur = lines[i]
+    const next = lines[i + 1]
+    if (next && /(?:^|\s)Break$/i.test(cur) && /^#\s*\d{1,3}(?:\s|$)/.test(next)) {
+      out.push(`${cur} ${next}`)
+      i++ // consumed the wrapped "#N" line
+      continue
+    }
+    out.push(cur)
+  }
+  return out
+}
+
 // True for the non-team "structural" lines inside a breaking-slip break section
 // (order summaries, item/break counts, totals, page indicators, headers). Used
 // to guard the team-name fallback so it only ever promotes a real team line —
@@ -213,7 +237,7 @@ function parseBreakingSlip(block, matchTeam) {
   let current = null
 
   for (const { page } of block.breakingPages) {
-    const lines = toLines(page)
+    const lines = stitchWrappedBreakHeaders(toLines(page))
 
     // Real name from the line under "User" (group 1 of USER_LINE).
     if (!realName) {
@@ -394,20 +418,42 @@ function parsePackingSlip(block, matchTeam) {
       let isGiveaway = false
 
       const bm = windowText.match(RX.BREAK_NUMBER)
+      if (bm) breakNumber = Number(bm[1])
+
+      // Team name — Whatnot puts it in one of two places depending on the export:
+      //   (a) AFTER "Break #N" in the product attributes ("…- Break #7 Dallas Cowboys")
+      //   (b) BEFORE "Order <id>" on the line item ("1 Houston Astros Order 123 $26.00")
+      // Collect both candidates, drop "N Item(s)" summary noise, and PREFER the
+      // one that resolves to a canonical team. This makes the packing slip a
+      // reliable fallback when the breaking slip is unusable — e.g. a compressed
+      // PDF whose breaking-slip font mangles the break-number digits so the
+      // ground-truth path can't be used.
+      const teamCandidates = []
       if (bm) {
-        breakNumber = Number(bm[1])
-        // Team text follows "Break #N"; strip leading separators and any trailing
-        // price/next-order noise, then fuzzy-match against the canonical teams.
-        const after = windowText.slice(windowText.indexOf(bm[0]) + bm[0].length)
-        const candidate = after
-          .replace(/^[\s:|,–—-]*/, '')
-          .replace(/\$[0-9.]+.*$/, '')
-          .replace(/Order\s+\d+.*$/, '')
-          .trim()
-        if (candidate) {
-          const mt = matchTeam(candidate)
-          team = mt.team || candidate || null
+        teamCandidates.push(
+          windowText.slice(windowText.indexOf(bm[0]) + bm[0].length)
+            .replace(/^[\s:|,–—-]*/, '')
+            .replace(/\$[0-9.]+.*$/, '')
+            .replace(/Order\s+\d+.*$/, '')
+            .trim()
+        )
+      }
+      {
+        const idx = lines[i].indexOf(om[0])
+        if (idx > 0) {
+          teamCandidates.push(
+            lines[i].slice(0, idx)
+              .replace(/^\s*\d+\s*x?\s*/i, '') // strip a leading quantity ("1 ", "2x ")
+              .replace(/[\s:|,–—-]+$/, '')
+              .trim()
+          )
         }
+      }
+      for (const c of teamCandidates) {
+        if (!c || /^\d+\s*items?$/i.test(c)) continue // skip empty + "N Item(s)" noise
+        const mt = matchTeam(c)
+        if (mt.team) { team = mt.team; break } // a resolved team always wins
+        if (!team) team = c // otherwise keep the first plausible raw
       }
 
       isGiveaway = RX.GIVEAWAY_FLAG.test(windowText) || RX.ZERO_PRICE.test(windowText)
@@ -540,6 +586,47 @@ function parsePages(pages, { onProgress, sport } = {}) {
     const breaking = parseBreakingSlip(block, matchTeam)
     // STEP 3 — packing slip = identity + shipping + per-order facts.
     const packing = parsePackingSlip(block, matchTeam)
+
+    // STEP 3.5 — reconcile a corrupted breaking-slip break NUMBER against the
+    // packing slip. Some Whatnot exports (compressed PDFs) corrupt the DIGITS in
+    // the breaking-slip font, so its "Break #N" header can read the wrong number
+    // ("Break #2" -> "Break #1") while the team NAMES and the whole packing slip
+    // stay clean. The breaking slip is still ground truth for which teams go
+    // TOGETHER; we only correct each break's NUMBER to the packing slip's clean
+    // value, decided by a vote over the teams/orders the two slips share. On a
+    // clean PDF the two agree, so nothing changes.
+    if (breaking.breaks.length && packing.orders.length) {
+      const packTeamBreak = new Map() // canonical team -> break number
+      const packOrderBreak = new Map() // order id -> break number
+      for (const o of packing.orders) {
+        if (o.breakNumber == null) continue
+        if (o.orderId) packOrderBreak.set(String(o.orderId), o.breakNumber)
+        if (o.team) {
+          const k = matchTeam(o.team).team || o.team
+          if (k) packTeamBreak.set(k, o.breakNumber)
+        }
+      }
+      for (const b of breaking.breaks) {
+        const votes = new Map()
+        const vote = (bn) => { if (bn != null) votes.set(bn, (votes.get(bn) || 0) + 1) }
+        for (const oid of b.orderIds) vote(packOrderBreak.get(String(oid)))
+        for (const raw of b.teams) vote(packTeamBreak.get(matchTeam(raw).team || raw))
+        let bestBn = null
+        let bestV = 0
+        for (const [bn, v] of votes) { if (v > bestV) { bestV = v; bestBn = bn } }
+        if (bestBn != null && bestBn !== b.breakNumber) b.breakNumber = bestBn
+      }
+      // Reconciliation may collapse two breaks onto the same number — merge them
+      // so a break number is never emitted twice for one customer.
+      const mergedBreaks = new Map()
+      for (const b of breaking.breaks) {
+        if (!mergedBreaks.has(b.breakNumber)) mergedBreaks.set(b.breakNumber, { breakNumber: b.breakNumber, orderIds: new Set(), teams: [] })
+        const m = mergedBreaks.get(b.breakNumber)
+        for (const o of b.orderIds) m.orderIds.add(o)
+        for (const t of b.teams) m.teams.push(t)
+      }
+      breaking.breaks = [...mergedBreaks.values()]
+    }
 
     extractEvent(block, event)
 

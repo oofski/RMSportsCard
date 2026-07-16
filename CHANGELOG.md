@@ -6,6 +6,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.24] - 2026-07-16
+
+### Fixed — "Combined Labels + Packing Slips" PDFs now parse the breaks
+Some Whatnot exports (the combined labels + packing-slips PDF, especially after
+compression) came in with **no usable breaks** — teams showed up as junk like
+"2 Items" / "1 Item", or nothing at all. Three separate format quirks are now
+handled:
+- **Wrapped break headers.** The breaking-slip line can wrap so the title ends
+  on the word "Break" and its "#N" drops to the next line — that split hid the
+  break (and its whole team list). The two lines are now stitched back together.
+- **Corrupted break-number digits.** Some compressed slips mangle the digits in
+  the breaking-slip font (e.g. "Break #2" prints as "Break #1"). The break
+  **number** is now reconciled against the clean packing slip by matching the
+  shared teams and order IDs, so cards land in the right break.
+- **Team before the order number.** When the packing slip lists the team ahead
+  of "Order …" ("1 Houston Astros Order 123 …"), the team is now read correctly,
+  and a "N Items" summary line is never mistaken for a team.
+- **"Oakland Athletics" → Athletics.** City-prefixed names now snap to the
+  canonical team even when the league list dropped the city.
+
+Badly-corrupted pages that can't be recovered are still flagged (e.g. a
+one-team-per-break collision) so you can fix them by hand instead of getting a
+silently-wrong break.
+
 ## [1.5.23] - 2026-07-15
 
 ### Fixed — follow-ups caught by an adversarial review of 1.5.22
