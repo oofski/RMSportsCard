@@ -123,6 +123,60 @@ Total: $78.00`
 
 const PAGES = [A_PACK, A_BREAK, B_PACK1, B_PACK2, B_BREAK, C_PACK, C_BREAK]
 
+// Whatnot's "Combined Labels + Packing Slips" export prints the break number at
+// the END of the product line, where the PDF text layer wraps "#N" onto its own
+// line ("...- Break" / "#1"). Before the rejoin fix in parseBreakingSlip, the
+// "Break #N" header was never detected, so the breaking slip yielded ZERO teams
+// and item-count lines ("2 Items") leaked in as fake teams under guessed break
+// numbers. Regression guard for that layout.
+const COMBINED_PACK = `Whatnot Packing Slip 1/1
+To: mauibru NEW From: rm_cardz
+Bryce Cassidy
+7365 Huntington Square Ln. Citrus Heights, CA. 95621. US
+15 July, 2026
+QTY Name & Description Attributes Subtotal
+1 Seattle Mariners Order 1187241107 $15.00
+1x 2026 FINEST BASEBALL HOBBY BOX (NEW RELEASE!)- Break #1
+1 Minnesota Twins Order 1187243455 $16.00
+1x 2026 FINEST BASEBALL HOBBY BOX (NEW RELEASE!)- Break #1
+2 Items $31.00
+USPS Ground Advantage™ #9300120762602323775962 14.0 oz`
+
+const COMBINED_BREAK = `Whatnot - Breaking Slip
+User
+Bryce Cassidy (mauibru)
+Orders
+#1187241107 #1187243455
+1 Break
+1x 2026 FINEST BASEBALL HOBBY BOX (NEW RELEASE!)- Break
+#1
+Orders: #1187241107 #1187243455
+2 Items
+__ Seattle Mariners
+__ Minnesota Twins
+Total: $31.00`
+
+describe('parsePages — Combined Labels + Packing Slips (wrapped "Break #N")', () => {
+  const ds = parsePages([COMBINED_PACK, COMBINED_BREAK], { sport: 'mlb' })
+
+  it('detects the break even when "#N" wraps onto its own line', () => {
+    expect(ds.breaks.map((b) => b.breakNumber)).toEqual([1])
+  })
+
+  it('captures the real teams from the breaking slip', () => {
+    const teams = ds.teamSlots
+      .filter((t) => t.customerId === 'mauibru')
+      .map((t) => t.teamName)
+      .sort()
+    expect(teams).toEqual(['Minnesota Twins', 'Seattle Mariners'])
+  })
+
+  it('does not misread item-count / USPS lines as teams', () => {
+    expect(ds.teamSlots.every((t) => !/Item|USPS|oz/i.test(t.teamName))).toBe(true)
+    expect(ds.warnings).toEqual([])
+  })
+})
+
 describe('parsePages', () => {
   const ds = parsePages(PAGES)
 

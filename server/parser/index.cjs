@@ -213,7 +213,19 @@ function parseBreakingSlip(block, matchTeam) {
   let current = null
 
   for (const { page } of block.breakingPages) {
-    const lines = toLines(page)
+    // Some Whatnot exports (notably the "Combined Labels + Packing Slips" layout)
+    // print the break number at the END of the product line, where the PDF text
+    // layer wraps it onto its OWN line ("...- Break" then "#4"). The "Break #N"
+    // header regex is line-anchored, so a split like that is never detected and
+    // the whole breaking slip yields ZERO teams — silently dropping us to the
+    // noisier packing-slip fallback and losing all team fidelity. Rejoin a "Break"
+    // token with its wrapped "#N" (both wrap points) BEFORE splitting into lines.
+    // This only ever fires on that exact split, so slips that already print
+    // "Break #N" together are untouched.
+    const rejoined = page
+      .replace(/Break\s*\n\s*#\s*(\d+)/gi, 'Break #$1')
+      .replace(/Break\s+#\s*\n\s*(\d+)/gi, 'Break #$1')
+    const lines = toLines(rejoined)
 
     // Real name from the line under "User" (group 1 of USER_LINE).
     if (!realName) {
