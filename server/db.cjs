@@ -578,6 +578,9 @@ class Db {
     // Total dollar value of this order = sum of every card's price ($0 giveaways
     // included, so the number matches what the buyer paid for the package).
     const value = slots.reduce((n, t) => n + (Number(t.price) || 0), 0)
+    // The Whatnot order id(s) on this package (distinct; a multi-card package can
+    // carry several) — shown in the Orders view as the human-facing identifier.
+    const orderIds = [...new Set(slots.map((t) => t.orderId).filter(Boolean))]
     return {
       id: sh.id,
       customerId: sh.customerId,
@@ -601,6 +604,8 @@ class Db {
       breakCount: breaks.length,
       // Total dollar value of the order (sum of card prices).
       value,
+      // Whatnot order id(s) for this package.
+      orderIds,
       // Multi-card alarm: a customer with more than one card (team slot) across
       // their breaks is flagged so the packer double-checks nothing is missed.
       // cardCount is the total team slots; multiCard drives the warning badge.

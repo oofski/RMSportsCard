@@ -1,29 +1,25 @@
 // =============================================================================
 // RM Cardz — Left navigation sidebar
 // -----------------------------------------------------------------------------
-// Replaces the old horizontal top-bar tabs with a vertical, collapsible left
-// rail. Expanded it shows icons + labels + account actions; collapsed it shows
-// an icon-only rail (labels become hover tooltips). The collapse state is owned
-// by App (persisted to localStorage) so the main panel can flex alongside it.
-//
-// `tab` is null on the data-gate (pre-import) screen — the nav is hidden there
-// but the account footer (theme, settings, sign out, version) stays available.
+// A vertical, collapsible left rail. The TOP nav is the day-to-day work views
+// (Orders / Checker / History). Everything else — the Shipping Tracker and Sales
+// Dashboard views, plus Users, the light/dark toggle and Preferences — lives in
+// a single hover-to-open "Settings" flyout in the footer, so the rail stays
+// short. Collapse state is owned by App (persisted); `tab` is null on the
+// pre-import data gate, which hides the work-view nav but keeps Settings.
 // =============================================================================
 
 import React from 'react'
 import Logo from './Logo.jsx'
 import {
   IconBox, IconCheckSquare, IconTruck, IconBarChart, IconClock,
-  IconSettings, IconLogOut, IconSun, IconMoon, IconUsers, IconUpload,
+  IconSettings, IconLogOut, IconSun, IconMoon, IconUsers,
 } from './Icons.jsx'
 
-// Nav model — split icon/label so the collapsed rail can render icons only.
-// Keys must match the render switch in App.jsx.
+// Primary work views — the trimmed top rail. Keys match App.jsx's render switch.
 const NAV = [
   { key: 'orders', icon: <IconBox />, label: 'Orders' },
   { key: 'checker', icon: <IconCheckSquare />, label: 'Checker' },
-  { key: 'shipping', icon: <IconTruck />, label: 'Shipping Tracker' },
-  { key: 'sales', icon: <IconBarChart />, label: 'Sales Dashboard' },
   { key: 'history', icon: <IconClock />, label: 'History' },
 ]
 
@@ -31,16 +27,11 @@ export default function SideBar({
   user, tab, onTab,
   collapsed, onToggleCollapse,
   appVersion,
-  onUploadNew, onOpenSettings, onOpenUsers, onLogout,
+  onOpenSettings, onOpenUsers, onLogout,
   theme, onToggleTheme,
 }) {
-  // A footer action button (icon always; label only when expanded).
-  const FootItem = ({ icon, label, onClick }) => (
-    <button className="nav-item" onClick={onClick} title={collapsed ? label : undefined}>
-      <span className="nav-icon">{icon}</span>
-      {!collapsed && <span className="nav-label">{label}</span>}
-    </button>
-  )
+  // The Settings group reads as "active" while you're in one of its sub-views.
+  const inSettingsView = tab === 'shipping' || tab === 'sales'
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`}>
@@ -75,15 +66,51 @@ export default function SideBar({
       )}
 
       <div className="sidebar-foot">
-        {onUploadNew && <FootItem icon={<IconUpload />} label="Upload New PDF" onClick={onUploadNew} />}
-        <FootItem
-          icon={theme === 'light' ? <IconMoon /> : <IconSun />}
-          label={theme === 'light' ? 'Dark mode' : 'Light mode'}
-          onClick={onToggleTheme}
-        />
-        <FootItem icon={<IconSettings />} label="Settings" onClick={onOpenSettings} />
-        {user.role === 'admin' && <FootItem icon={<IconUsers />} label="Users" onClick={onOpenUsers} />}
-        <FootItem icon={<IconLogOut />} label="Sign out" onClick={onLogout} />
+        {/* Settings — hover (or focus) to reveal the sub-tabs flyout. */}
+        <div className="nav-group">
+          <button
+            className={`nav-item ${inSettingsView ? 'active' : ''}`}
+            title={collapsed ? 'Settings' : undefined}
+            aria-haspopup="true"
+          >
+            <span className="nav-icon"><IconSettings /></span>
+            {!collapsed && <span className="nav-label">Settings</span>}
+            {!collapsed && <span className="nav-caret" aria-hidden="true">›</span>}
+          </button>
+
+          <div className="nav-submenu" role="menu">
+            {tab !== null && (
+              <>
+                <div className="nav-submenu-title">Views</div>
+                <button className={`nav-subitem ${tab === 'shipping' ? 'active' : ''}`} role="menuitem" onClick={() => onTab('shipping')}>
+                  <span className="nav-icon"><IconTruck /></span><span className="nav-label">Shipping Tracker</span>
+                </button>
+                <button className={`nav-subitem ${tab === 'sales' ? 'active' : ''}`} role="menuitem" onClick={() => onTab('sales')}>
+                  <span className="nav-icon"><IconBarChart /></span><span className="nav-label">Sales Dashboard</span>
+                </button>
+                <div className="nav-submenu-sep" />
+              </>
+            )}
+            {user.role === 'admin' && (
+              <button className="nav-subitem" role="menuitem" onClick={onOpenUsers}>
+                <span className="nav-icon"><IconUsers /></span><span className="nav-label">Users</span>
+              </button>
+            )}
+            <button className="nav-subitem" role="menuitem" onClick={onToggleTheme}>
+              <span className="nav-icon">{theme === 'light' ? <IconMoon /> : <IconSun />}</span>
+              <span className="nav-label">{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+            </button>
+            <button className="nav-subitem" role="menuitem" onClick={onOpenSettings}>
+              <span className="nav-icon"><IconSettings /></span><span className="nav-label">Preferences</span>
+            </button>
+          </div>
+        </div>
+
+        <button className="nav-item" onClick={onLogout} title={collapsed ? 'Sign out' : undefined}>
+          <span className="nav-icon"><IconLogOut /></span>
+          {!collapsed && <span className="nav-label">Sign out</span>}
+        </button>
+
         {!collapsed && (
           <div className="sidebar-user small muted">
             {user.displayName || user.username} · {user.role}

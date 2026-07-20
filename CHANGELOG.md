@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.26] - 2026-07-20
+
+### Changed — Slimmer sidebar with a Settings menu
+- The left rail is trimmed to the day-to-day views — **Orders, Checker,
+  History**. **Shipping Tracker** and **Sales Dashboard** now live in a
+  **Settings** menu that opens on hover, alongside **Users**, the **Light/Dark
+  mode** toggle, and **Preferences**.
+- **Upload a new PDF** moved out of the sidebar and onto the **Orders** toolbar
+  (an **Upload PDF** button).
+
+### Added — Spot your big spenders
+- Every order can be **highlighted by value**. The **top 20% of spenders** are
+  flagged with a gold **⭐ Top spender** marker (toggle it on/off), and you can
+  set a **dollar threshold** so any order at or above that amount is highlighted
+  too. Both preferences are remembered.
+
+### Changed — Order ID instead of the tracking number
+- The Orders view now shows the **Whatnot order ID(s)** for each package (the
+  number you actually reference) instead of the raw shipping/tracking number.
+  You can **search by order ID**, and the **USPS** button still opens tracking.
+
 ## [1.5.25] - 2026-07-16
 
 ### Added — Each order shows its dollar value

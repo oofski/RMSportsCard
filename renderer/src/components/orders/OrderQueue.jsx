@@ -26,6 +26,10 @@ function money(n) {
   return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+// localStorage is absent in the SSR render test (node, no jsdom) — guard access.
+const lsGet = (k) => { try { return typeof localStorage !== 'undefined' ? localStorage.getItem(k) : null } catch { return null } }
+const lsSet = (k, v) => { try { if (typeof localStorage !== 'undefined') localStorage.setItem(k, v) } catch { /* ignore */ } }
+
 // The next stage a one-click "Done" should advance an order to.
 function nextStageCode(stage) {
   if (stage === 'exception' || stage === 'returned') return 'all_good'
@@ -36,7 +40,7 @@ function nextStageCode(stage) {
 // `initialOrders` / `initialBreakFilter` are optional test seams: when supplied
 // the component seeds from them and skips the network fetch (used by the render
 // smoke test). Production passes neither.
-export default function OrderQueue({ currentUser, initialOrders, initialBreakFilter = null }) {
+export default function OrderQueue({ currentUser, initialOrders, initialBreakFilter = null, onUploadNew }) {
   const [orders, setOrders] = useState(initialOrders || [])
   const [loading, setLoading] = useState(!initialOrders)
   const [error, setError] = useState('')
@@ -49,6 +53,12 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
   const [toast, setToast] = useState('')
   const [tracking, setTracking] = useState(null) // { done, total } while scanning
   const [specialEdit, setSpecialEdit] = useState(null) // { id, text } while editing a special request
+  // High-value spender highlighting: the top 20% by value, and/or a manual
+  // dollar threshold. Both persist so the operator's preference sticks.
+  const [highlightTop20, setHighlightTop20] = useState(() => lsGet('rmcardz.orders.top20') !== '0')
+  const [spendThreshold, setSpendThreshold] = useState(() => Number(lsGet('rmcardz.orders.threshold')) || 0)
+  useEffect(() => { lsSet('rmcardz.orders.top20', highlightTop20 ? '1' : '0') }, [highlightTop20])
+  useEffect(() => { lsSet('rmcardz.orders.threshold', String(spendThreshold || 0)) }, [spendThreshold])
 
   const load = useCallback(async () => {
     try {
@@ -227,12 +237,21 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
       else if (filter === 'flagged' && !FLAGGED.has(o.stage)) return false
       else if (filter !== 'all' && filter !== 'held' && filter !== 'flagged' && o.stage !== filter) return false
       if (needle) {
-        const hay = `${o.customer.realName} ${o.customer.handle} ${o.trackingNumber || ''}`.toLowerCase()
+        const hay = `${o.customer.realName} ${o.customer.handle} ${(o.orderIds || []).join(' ')} ${o.trackingNumber || ''}`.toLowerCase()
         if (!hay.includes(needle)) return false
       }
       return true
     })
   }, [orders, filter, search])
+
+  // Value cutoff for the "top 20% of spenders" highlight: the value at the 20th
+  // percentile of paid orders (highest-value first). Computed over ALL orders so
+  // the cutoff is stable regardless of the active filter/search.
+  const top20Cutoff = useMemo(() => {
+    const vals = orders.map((o) => o.value || 0).filter((v) => v > 0).sort((a, b) => b - a)
+    if (!vals.length) return Infinity
+    return vals[Math.max(1, Math.ceil(vals.length * 0.2)) - 1]
+  }, [orders])
 
   // Every break number that appears across all orders, ascending — drives the
   // "By break" selector.
@@ -300,13 +319,17 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
     // this makes the promo-only shipment impossible to miss.
     const giveawayOnly = o.hasGiveaway && o.cardCount > 0 && o.giveawayCount >= o.cardCount
     const editingSpecial = specialEdit && specialEdit.id === o.id
+    // High-value spender: top 20% by value and/or at/above the manual threshold.
+    const topSpender = highlightTop20 && (o.value || 0) > 0 && (o.value || 0) >= top20Cutoff
+    const overThreshold = spendThreshold > 0 && (o.value || 0) >= spendThreshold
+    const vip = topSpender || overThreshold
     // Move up/down are swapped within the order's hold group by the backend, so
     // gate the arrows on position WITHIN that group (not the mixed visible list),
     // otherwise the last active order's ↓ and the first held order's ↑ are dead.
     const group = list.filter((x) => !!x.onHold === !!o.onHold)
     const gi = group.indexOf(o)
     return (
-      <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.specialRequest ? 'special' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
+      <div key={o.id} className={`order-row ${o.onHold ? 'held' : ''} ${flagged ? 'flagged' : ''} ${o.specialRequest ? 'special' : ''} ${vip ? 'vip' : ''} ${o.topSleevedCount > 0 ? 'has-sleeve' : ''} ${isExpanded ? 'open' : ''}`}>
         {/* Special request pinned at the TOP of the order — the whole card glows
             red so the packer cannot miss it. Sibling of .order-row-main (not
             inside it) so editing never toggles the card open/closed. */}
@@ -360,6 +383,14 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
             <strong>{o.customer.realName}</strong>
             <span className="muted small">@{o.customer.handle}</span>
             <span className="badge order-value" title="Order value — sum of this package's card prices">{money(o.value)}</span>
+            {vip && (
+              <span
+                className="badge vip"
+                title={[topSpender ? 'Top 20% of spenders' : '', overThreshold ? `Spend ≥ ${money(spendThreshold)}` : ''].filter(Boolean).join(' · ')}
+              >
+                ⭐ Top spender
+              </span>
+            )}
             {focusBreak && (
               <span className="badge" title={`Break #${breakFilter}: ${focusBreak.teams.map((t) => t.teamName).join(', ')}`}>
                 {focusBreak.teams.map((t) => t.teamName).join(', ') || `Break #${breakFilter}`}
@@ -456,7 +487,9 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
 
             {/* Secondary actions tucked below a hairline so they recede. */}
             <div className="order-detail-actions">
-              {o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>}
+              {(o.orderIds || []).length > 0
+                ? <span className="mono small" title={`Whatnot order ID${o.orderIds.length > 1 ? 's' : ''}`}>#{o.orderIds.join(', #')}</span>
+                : (o.trackingNumber && <span className="muted small mono" title="Tracking number">{o.trackingNumber}</span>)}
               <span className="spacer" />
               <button className="btn btn-sm btn-ghost" onClick={() => startSpecial(o)} title="Add a red special-request note pinned to the top of this order">
                 {o.specialRequest ? 'Edit request' : 'Special request'}
@@ -486,6 +519,11 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
           </span>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          {onUploadNew && (
+            <button className="btn btn-sm" onClick={onUploadNew} title="Import a new Whatnot order PDF (replaces the current event; your progress carries forward for matching customers)">
+              Upload PDF
+            </button>
+          )}
           <button
             className="btn btn-sm btn-ghost"
             onClick={allExpanded ? collapseAll : expandAll}
@@ -536,10 +574,33 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
           className="input"
           style={{ width: 'auto', flex: 1, minWidth: 200 }}
           type="search"
-          placeholder="Search name, handle, tracking #…"
+          placeholder="Search name, handle, order # or tracking #…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
+      </div>
+
+      {/* Big-spender highlighting: top 20% by value and/or a manual dollar floor. */}
+      <div className="row" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'center' }}>
+        <span className="muted small nowrap">⭐ Highlight big spenders:</span>
+        <label className="row nowrap" style={{ gap: 6, alignItems: 'center', cursor: 'pointer' }} title="Highlight the highest-value 20% of orders">
+          <input type="checkbox" checked={highlightTop20} onChange={(e) => setHighlightTop20(e.target.checked)} style={{ margin: 0 }} />
+          <span className="small">Top 20%</span>
+        </label>
+        <span className="row nowrap" style={{ gap: 4, alignItems: 'center' }}>
+          <span className="muted small">Flag orders ≥ $</span>
+          <input
+            className="input"
+            style={{ width: 84 }}
+            type="number"
+            min="0"
+            step="1"
+            value={spendThreshold || ''}
+            placeholder="0"
+            title="Also highlight any order at or above this dollar amount"
+            onChange={(e) => setSpendThreshold(Math.max(0, Number(e.target.value) || 0))}
+          />
+        </span>
       </div>
 
       {/* Order list — one scannable row per order. The full pipeline, hold/reorder,

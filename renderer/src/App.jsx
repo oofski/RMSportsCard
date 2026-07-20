@@ -144,7 +144,6 @@ export default function App() {
             onLogout={handleLogout}
             onOpenSettings={() => setSettingsOpen(true)}
             onOpenUsers={() => setUsersOpen(true)}
-            onUploadNew={null}
             theme={theme}
             onToggleTheme={toggleTheme}
           />
@@ -178,13 +177,12 @@ export default function App() {
           onLogout={handleLogout}
           onOpenSettings={() => setSettingsOpen(true)}
           onOpenUsers={() => setUsersOpen(true)}
-          onUploadNew={() => setHasData(false)}
           theme={theme}
           onToggleTheme={toggleTheme}
         />
         <main className="app-main">
           <div className="container">
-            {tab === 'orders' && <OrderQueue currentUser={user} />}
+            {tab === 'orders' && <OrderQueue currentUser={user} onUploadNew={() => setHasData(false)} />}
             {tab === 'checker' && <BreakChecklist currentUser={user} />}
             {tab === 'shipping' && <ShippingTracker currentUser={user} />}
             {tab === 'sales' && <SalesDashboard currentUser={user} />}

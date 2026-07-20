@@ -247,8 +247,11 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
   display: flex; flex-direction: column;
   background: var(--bg-2); border-right: 1px solid var(--line);
   transition: width 0.15s ease, flex-basis 0.15s ease;
-  overflow: hidden;
+  /* visible (not hidden) so the Settings flyout can escape the rail; labels are
+     unmounted when collapsed, so nothing spills during the width transition. */
+  overflow: visible;
 }
+.sidebar-head { overflow: hidden; }
 .sidebar.collapsed { width: 60px; flex-basis: 60px; }
 .sidebar-head {
   display: flex; align-items: center; justify-content: space-between;
@@ -275,6 +278,31 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .nav-label { white-space: nowrap; overflow: hidden; }
 .sidebar.collapsed .nav-item { justify-content: center; gap: 0; padding: 10px 0; }
 .sidebar-user { padding: 8px 12px; line-height: 1.5; }
+
+/* ---- Settings hover flyout (sub-tabs) ---------------------------------- */
+.nav-group { position: relative; }
+.nav-caret { margin-left: auto; color: var(--text-dim); font-weight: 700; }
+.nav-submenu {
+  position: absolute; left: calc(100% + 6px); bottom: 0; min-width: 214px; z-index: 60;
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.35);
+  padding: 6px; display: none; flex-direction: column; gap: 2px;
+}
+.nav-group:hover .nav-submenu, .nav-group:focus-within .nav-submenu { display: flex; }
+/* Invisible bridge over the 6px gap so the cursor can reach the flyout without
+   the :hover dropping and closing it. */
+.nav-submenu::before { content: ''; position: absolute; left: -8px; top: 0; bottom: 0; width: 8px; }
+.nav-submenu-title { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-dim); padding: 4px 10px 2px; }
+.nav-submenu-sep { height: 1px; background: var(--line); margin: 4px 2px; }
+.nav-subitem {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border-radius: 7px; border: 1px solid transparent;
+  background: transparent; color: var(--text-dim); font-weight: 550;
+  cursor: pointer; text-align: left; font-size: 13px; white-space: nowrap;
+}
+.nav-subitem:hover { color: var(--text); background: var(--bg-3); }
+.nav-subitem.active { color: var(--text); background: var(--bg-3); border-color: var(--accent); }
+.nav-subitem .nav-label { overflow: visible; }
 
 /* ---- Planner: simplified order rows ------------------------------------ */
 .order-row { background: var(--bg-2); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 10px; transition: border-color 0.12s ease; }
@@ -307,6 +335,12 @@ table.grid tr.exception td { box-shadow: inset 3px 0 0 var(--bad); }
 .special-view, .special-editor { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; }
 .special-text { font-weight: 600; color: var(--text); overflow-wrap: anywhere; }
 .special-editor .input { flex: 1; min-width: 0; }
+/* High-value spender highlight (top 20% and/or over a manual threshold). Gold
+   wash + left bar so big spenders pop, but operational alerts (special request,
+   flagged) still win the row when both apply. */
+.order-row.vip:not(.special):not(.flagged) { background: color-mix(in srgb, #f59e0b 12%, var(--bg-2)); box-shadow: inset 4px 0 0 #f59e0b; }
+.order-row.vip:not(.special):not(.flagged) .order-row-main:hover { background: color-mix(in srgb, #f59e0b 18%, var(--bg-3)); }
+.badge.vip { background: #f59e0b; color: #3a2500; border-color: #f59e0b; font-weight: 700; }
 .order-row-main {
   display: grid;
   grid-template-columns: max-content minmax(180px, 1fr) max-content max-content;
