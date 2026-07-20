@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.28] - 2026-07-20
+
+### Fixed — A fresh upload starts everything in "To Pick"
+Importing a PDF now starts every order in **To Pick** with nothing pre-checked.
+Progress is only carried forward when you re-import the **same, named event** (a
+corrected re-export) — a brand-new upload, or any export without an event name
+(most Whatnot PDFs), always begins with a clean board instead of inheriting a
+previous event's picked/packed state.
+
 ## [1.5.27] - 2026-07-20
 
 ### Fixed — Bulletproofing the PDF order parse

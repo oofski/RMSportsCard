@@ -43,16 +43,25 @@ class Db {
   // ---------------------------------------------------------------------------
   // Import — load a freshly parsed dataset, preserving the user table.
   // ---------------------------------------------------------------------------
+  // Two events count as the SAME only when we can positively confirm it: a
+  // non-empty event name that matches (and dates, when present). Null/blank event
+  // names — common in Whatnot PDF exports — are treated as DIFFERENT events, so a
+  // fresh upload never inherits a prior event's picked/packed state.
+  static _sameEventIdentity(a, b) {
+    const nm = (x) => (x && x.name ? String(x.name).trim().toLowerCase() : '')
+    const dt = (x) => (x && x.date ? String(x.date).trim().toLowerCase() : '')
+    return !!nm(a) && nm(a) === nm(b) && dt(a) === dt(b)
+  }
+
   importDataset(dataset, { filename, name, sourceKind } = {}) {
     const s = this.store.state
-    // Capture operator-owned state from the OUTGOING event BEFORE we overwrite it.
-    // A corrected Whatnot re-export carries none of the operator's progress, so
-    // without carrying it forward a re-import would silently reset every order to
-    // "To Pick" and wipe shipping statuses, notes, holds, queue order, checkoffs
-    // and special requests. We re-attach it by stable identity below.
+    // Capture operator-owned state + event identity from the OUTGOING event BEFORE
+    // we overwrite it, so a corrected re-export of the SAME event can keep the
+    // operator's packing/shipping progress (see _carryForwardOperatorState).
     const prevShipments = s.shipments || []
     const prevSlots = s.teamSlots || []
     const prevBreaks = s.breaks || []
+    const prevEvent = s.meta.event || { name: null, date: null }
     s.meta.importedAt = now()
     s.meta.event = dataset.event || { name: null, date: null }
     // Which league this import was parsed as ('nfl' | 'mlb' | 'nba'). Defaults to
@@ -66,7 +75,14 @@ class Db {
     s.batchUrls = dataset.batchUrls || []
     s.warnings = dataset.warnings || []
     s.breakAudit = dataset.breakAudit || []
-    this._carryForwardOperatorState(prevShipments, prevSlots, prevBreaks)
+    // Carry operator progress forward ONLY when this is a CONFIRMED re-import of
+    // the same event (a matching, non-empty event name). A brand-new upload — or
+    // any export without an event name (many Whatnot PDFs carry none) — starts
+    // FRESH: every order in "To Pick", nothing pre-picked/packed. This keeps a new
+    // event's board clean while still preserving a corrected same-event re-import.
+    if (Db._sameEventIdentity(prevEvent, s.meta.event)) {
+      this._carryForwardOperatorState(prevShipments, prevSlots, prevBreaks)
+    }
     if (filename) s.meta.lastImportFilename = filename
     // Import history log: append a nameable record of THIS upload (item 3).
     this._recordImport({ filename, name, sourceKind })

@@ -61,6 +61,31 @@ describe('re-import carries operator state forward (corrected re-export)', () =>
     db.importDataset({ event: { name: 'Other', date: '2026-01-01' }, breaks: [], teamSlots: [], customers: [], shipments: [], orders: [] })
     expect(db.listOrders().length).toBe(0) // cleanly replaced, nothing carried
   })
+
+  it('a fresh upload with NO event name starts every order in To Pick (no carry-forward)', () => {
+    const order = db.listOrders().find((o) => o.breaks.length && o.breaks[0].teams.length)
+    const cust = order.customerId
+    const slotId = order.breaks[0].teams[0].slotId
+    const teamName = order.breaks[0].teams[0].teamName
+    const brkNum = order.breaks[0].breakNumber
+    db.setOrderStage(order.id, 'put_together', { username: 'a' })
+    db.setTeamSlotChecked(slotId, true, { username: 'a' })
+
+    // A NEW (unnamed) upload that happens to reuse this customer + team must NOT
+    // inherit the prior progress — a fresh board is all To Pick.
+    db.importDataset({
+      event: { name: null, date: null },
+      breaks: [{ id: 'break_' + brkNum, breakNumber: brkNum, eventName: null, status: 'pending' }],
+      teamSlots: [{ id: 'slot_new_1', breakId: 'break_' + brkNum, breakNumber: brkNum, teamName, customerId: cust, orderId: '1', price: 5, isGiveaway: false, checkedOff: false, checkedOffAt: null, checkedOffBy: null }],
+      customers: [{ id: cust, whatnotHandle: cust, realName: 'X', address: '', isNew: false }],
+      shipments: [{ id: 'ship_' + cust, customerId: cust, trackingNumber: null, manualStatus: { code: 'not_shipped', setAt: null, setBy: null } }],
+      orders: [{ id: 'o_new_1', customerId: cust, breakId: 'break_' + brkNum, breakNumber: brkNum, teamName, price: 5, isGiveaway: false }],
+    })
+
+    const after = db.listOrders().find((o) => o.customerId === cust)
+    expect(after.stage).toBe('to_pick') // NOT the carried put_together
+    expect(after.pick.checked).toBe(0) // NOT the carried checkoff
+  })
 })
 
 describe('packed break status behaves correctly under checkoff edits and re-import', () => {
