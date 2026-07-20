@@ -121,4 +121,20 @@ describe('orders queue', () => {
     })
     expect(r.status).toBe(404)
   })
+
+  it('reports each order value (sum of card prices) and per-break subtotals', async () => {
+    const orders = await (await api('/api/orders')).json()
+    for (const o of orders) {
+      expect(typeof o.value).toBe('number')
+      // The order value equals the sum of its per-break subtotals...
+      const breakSum = o.breaks.reduce((n, b) => n + b.value, 0)
+      expect(o.value).toBeCloseTo(breakSum, 2)
+      // ...and each break subtotal equals the sum of that break's card prices.
+      for (const b of o.breaks) {
+        expect(b.value).toBeCloseTo(b.teams.reduce((n, t) => n + (t.price || 0), 0), 2)
+      }
+    }
+    // At least one real (paid) order carries a positive value in the demo data.
+    expect(orders.some((o) => o.value > 0)).toBe(true)
+  })
 })

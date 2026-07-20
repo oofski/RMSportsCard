@@ -20,7 +20,7 @@ import OrderQueue from '../renderer/src/components/orders/OrderQueue.jsx'
 
 // A team slot, in the shape db._orderRow returns (giveaway/sleeve default off).
 const team = (slotId, name, opts = {}) => ({
-  slotId, teamName: name, checkedOff: false, topSleeved: false, isGiveaway: false, ...opts,
+  slotId, teamName: name, price: 0, checkedOff: false, topSleeved: false, isGiveaway: false, ...opts,
 })
 
 // A synthetic order row; the multi-card / giveaway / sleeve counts are derived
@@ -29,7 +29,11 @@ function order(id, name, handle, breaks, specialRequest = null) {
   const slots = breaks.flatMap((b) => b.teams)
   const cardCount = slots.length
   const giveawayCount = slots.filter((t) => t.isGiveaway).length
+  // Inject per-break subtotals + the order total, exactly as db._orderRow does.
+  breaks = breaks.map((b) => ({ ...b, value: b.teams.reduce((n, t) => n + (Number(t.price) || 0), 0) }))
+  const value = slots.reduce((n, t) => n + (Number(t.price) || 0), 0)
   return {
+    value,
     id,
     customerId: handle,
     customer: { handle, realName: name, address: '', isNew: false },
@@ -59,7 +63,7 @@ function order(id, name, handle, breaks, specialRequest = null) {
 const ORDERS = [
   // Solely in break 9 (a paid card) → belongs in the "Only in Break #9" group.
   // Also carries a special request → red banner pinned to the top of the card.
-  order('a', 'Alice Alpha', 'alice', [{ breakNumber: 9, teams: [team('s1', 'Dallas Cowboys')] }],
+  order('a', 'Alice Alpha', 'alice', [{ breakNumber: 9, teams: [team('s1', 'Dallas Cowboys', { price: 25 })] }],
     { text: 'Ship in a team bag', setAt: '2026-07-01T00:00:00.000Z', setBy: 'owner' }),
   // Solely in break 2 → "Other orders" when break 9 is selected.
   order('b', 'Bob Beta', 'bob', [{ breakNumber: 2, teams: [team('s2', 'Chicago Bears')] }]),
@@ -84,6 +88,7 @@ describe('OrderQueue renders', () => {
     expect(html).toContain('Break #9')          // an option for the derived break
     expect(html).toContain('Giveaway only')     // Dave's giveaway-only flag
     expect(html).toContain('Collapse all')      // the expand/collapse-all toggle (default expanded)
+    expect(html).toContain('$25.00')            // Alice's order value badge
   })
 
   it('expands orders by default and pins a special request at the top', () => {

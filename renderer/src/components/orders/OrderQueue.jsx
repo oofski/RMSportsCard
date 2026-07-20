@@ -21,6 +21,11 @@ import { PIPELINE_STAGES, ORDER_STAGES, stageByCode } from '../../constants.js'
 const FLAGGED = new Set(['exception', 'returned'])
 const PIPELINE_ORDER = ['to_pick', 'put_together', 'sent', 'all_good']
 
+// Format a dollar amount for the order/break value read-outs.
+function money(n) {
+  return '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
 // The next stage a one-click "Done" should advance an order to.
 function nextStageCode(stage) {
   if (stage === 'exception' || stage === 'returned') return 'all_good'
@@ -354,6 +359,7 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
           <div className="order-row-id">
             <strong>{o.customer.realName}</strong>
             <span className="muted small">@{o.customer.handle}</span>
+            <span className="badge order-value" title="Order value — sum of this package's card prices">{money(o.value)}</span>
             {focusBreak && (
               <span className="badge" title={`Break #${breakFilter}: ${focusBreak.teams.map((t) => t.teamName).join(', ')}`}>
                 {focusBreak.teams.map((t) => t.teamName).join(', ') || `Break #${breakFilter}`}
@@ -426,7 +432,11 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
                       {isFocus && <span className="badge" style={{ padding: '0 6px' }}>selected</span>}
                       {sleeved > 0 && <span className="badge sleeve small" title={`${sleeved} top-sleeved in this break`}>🛡 {sleeved}</span>}
                     </span>
-                    <span className="mono small" style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
+                    <span className="mono small">
+                      <span title="Break subtotal">{money(b.value)}</span>
+                      <span className="muted"> · </span>
+                      <span style={complete ? { color: 'var(--good)' } : undefined}>{done}/{b.teams.length}</span>
+                    </span>
                   </div>
                   <div className="row" style={{ flexWrap: 'wrap' }}>
                     {b.teams.map((t) => (
@@ -469,7 +479,12 @@ export default function OrderQueue({ currentUser, initialOrders, initialBreakFil
     <div className="col" style={{ gap: 14 }}>
       {/* Toolbar */}
       <div className="row-between" style={{ flexWrap: 'wrap', gap: 10 }}>
-        <h2 style={{ margin: 0 }}>Orders</h2>
+        <div className="row" style={{ alignItems: 'baseline', gap: 10 }}>
+          <h2 style={{ margin: 0 }}>Orders</h2>
+          <span className="muted small nowrap" title="Number of orders shown and their combined value">
+            {visible.length} order{visible.length === 1 ? '' : 's'} · {money(visible.reduce((n, o) => n + (o.value || 0), 0))}
+          </span>
+        </div>
         <div className="row" style={{ gap: 8 }}>
           <button
             className="btn btn-sm btn-ghost"

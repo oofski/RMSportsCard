@@ -564,12 +564,20 @@ class Db {
     const byBreak = new Map()
     slots.forEach((t) => {
       if (!byBreak.has(t.breakNumber)) byBreak.set(t.breakNumber, [])
-      byBreak.get(t.breakNumber).push({ slotId: t.id, teamName: t.teamName, checkedOff: !!t.checkedOff, topSleeved: !!t.topSleeved, isGiveaway: !!t.isGiveaway, orderId: t.orderId })
+      byBreak.get(t.breakNumber).push({ slotId: t.id, teamName: t.teamName, price: Number(t.price) || 0, checkedOff: !!t.checkedOff, topSleeved: !!t.topSleeved, isGiveaway: !!t.isGiveaway, orderId: t.orderId })
     })
     const breaks = [...byBreak.entries()]
       .sort((a, b) => a[0] - b[0])
-      .map(([breakNumber, teams]) => ({ breakNumber, teams: teams.sort((x, y) => x.teamName.localeCompare(y.teamName)) }))
+      .map(([breakNumber, teams]) => ({
+        breakNumber,
+        teams: teams.sort((x, y) => x.teamName.localeCompare(y.teamName)),
+        // Per-break subtotal (sum of the cards' prices; giveaways are $0).
+        value: teams.reduce((n, t) => n + (Number(t.price) || 0), 0),
+      }))
     const checked = slots.filter((t) => t.checkedOff).length
+    // Total dollar value of this order = sum of every card's price ($0 giveaways
+    // included, so the number matches what the buyer paid for the package).
+    const value = slots.reduce((n, t) => n + (Number(t.price) || 0), 0)
     return {
       id: sh.id,
       customerId: sh.customerId,
@@ -591,6 +599,8 @@ class Db {
       packedBy: sh.packedBy || null,
       breaks,
       breakCount: breaks.length,
+      // Total dollar value of the order (sum of card prices).
+      value,
       // Multi-card alarm: a customer with more than one card (team slot) across
       // their breaks is flagged so the packer double-checks nothing is missed.
       // cardCount is the total team slots; multiCard drives the warning badge.

@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.25] - 2026-07-16
+
+### Added — Each order shows its dollar value
+- Every order in the Orders queue now shows its **dollar value** — a green
+  **$ pill** next to the customer (the sum of that package's card prices;
+  giveaways count as $0). Expanding an order shows a **per-break subtotal**, and
+  the toolbar shows the **combined value of the orders currently in view** (it
+  follows your stage filter, search, and by-break grouping).
+
 ## [1.5.24] - 2026-07-16
 
 ### Fixed — "Combined Labels + Packing Slips" PDFs now parse the breaks

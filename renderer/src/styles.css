@@ -154,6 +154,9 @@ table.grid tr.clickable:focus-visible {
    giveaway, so none of the paid-card badges apply. Filled violet gives it its
    own unmistakable category, distinct from the amber "giveaway + paid" combo. */
 .badge.giveaway-only { background: #7c3aed; color: #fff; border-color: #7c3aed; font-weight: 600; }
+/* Per-order dollar value — a quiet money-green pill so the amount is scannable
+   without competing with the red/amber alert badges. */
+.badge.order-value { background: color-mix(in srgb, var(--good) 14%, var(--bg-2)); color: var(--good); border-color: color-mix(in srgb, var(--good) 32%, transparent); font-variant-numeric: tabular-nums; }
 
 /* ---- Pick list rows (Module A — tablet) -------------------------------- */
 .pick-row {
