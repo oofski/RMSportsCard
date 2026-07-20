@@ -104,9 +104,10 @@ const GIVEAWAY_FLAG = /GIVEAWAY/
 // an order line is a no-charge giveaway.
 const ZERO_PRICE = /\$0\.00\b/
 
-// A generic price token "$12.34" used to read per-order prices off packing-slip
-// product lines. GLOBAL — use with matchAll to find all prices on a line.
-const PRICE_TOKEN = /\$([0-9]+(?:\.[0-9]{2})?)/g
+// A generic price token "$12.34" or "$1,250.00" used to read per-order prices off
+// packing-slip product lines. Thousands separators are allowed so a big card's
+// price is not truncated at the comma. GLOBAL — use with matchAll.
+const PRICE_TOKEN = /\$([0-9][0-9,]*(?:\.[0-9]{2})?)/g
 
 module.exports = {
   PACKING_SLIP_START,

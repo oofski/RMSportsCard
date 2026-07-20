@@ -119,7 +119,21 @@ function createTeamMatcher(sport) {
         best = canon
       }
     }
-    if (bestDist <= 2) return { team: best, exact: false, distance: bestDist }
+    if (bestDist <= 2) {
+      // Cross-league guard: refuse to fuzzy-snap a name that is an EXACT team in
+      // a DIFFERENT league. "New York Mets" (MLB) is only edit-distance 1 from
+      // "New York Jets" (NFL); if this matcher is bound to NFL it would silently
+      // put the Mets card in a Jets slot. A name that's exact elsewhere is a real
+      // other-league team, not a typo — leave it unrecognized (a warning) rather
+      // than assign it to the wrong team.
+      for (const s of Object.values(SPORTS)) {
+        if (s.code === code) continue
+        if ((s.teams || []).some((t) => normalizeKey(t) === key)) {
+          return { team: null, exact: false, distance: bestDist }
+        }
+      }
+      return { team: best, exact: false, distance: bestDist }
+    }
     return { team: null, exact: false, distance: bestDist }
   }
 

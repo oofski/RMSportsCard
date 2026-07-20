@@ -99,10 +99,11 @@ function normalizeServiceType(raw) {
   return String(raw || '').replace(/[®™]/g, '').replace(/\s+/g, ' ').trim() || null
 }
 
-// Parse a dollar string ("12.34") to a number, defaulting to 0 (giveaways).
+// Parse a dollar string ("12.34" or "1,250.00") to a number, defaulting to 0
+// (giveaways). Thousands separators are stripped so a big card isn't read as $1.
 function toPrice(raw) {
-  const n = Number(raw)
-  return Number.isFinite(n) ? n : 0
+  const n = Number(String(raw == null ? '' : raw).replace(/,/g, ''))
+  return Number.isFinite(n) && n >= 0 ? n : 0
 }
 
 // Detects an event-date line in either "27 June, 2026" / "June 27, 2026" or
@@ -196,11 +197,20 @@ function groupByCustomer(pages) {
     //       header was not repeated). Attach it to the current customer under the
     //       current slip's bucket so its breaks/teams are not dropped.
     if (!page || !String(page).trim()) return
-    if (currentHandle && currentSlip) {
-      const block = ensureBlock(currentHandle)
-      if (currentSlip === 'breaking') block.breakingPages.push({ page, pageIndex })
-      else block.packingPages.push({ page, pageIndex })
+    if (currentHandle && currentSlip === 'breaking') {
+      // Breaking slips continue WITHOUT repeating their header — attach the page.
+      ensureBlock(currentHandle).breakingPages.push({ page, pageIndex })
+    } else if (currentHandle && currentSlip === 'packing' && RX.ORDER_ID.test(page)) {
+      // A header-less page under a packing slip is a real continuation ONLY if it
+      // carries item ("Order <id>") lines. A bare shipping-LABEL page (address +
+      // tracking barcode, no order lines) is NOT attached — so a label printed
+      // BEFORE its own packing slip can't hijack the previous customer's
+      // tracking/weight/service. (Packing pages always repeat the "Whatnot Packing
+      // Slip" header, so a genuine 2/2 continuation is handled above, not here.)
+      ensureBlock(currentHandle).packingPages.push({ page, pageIndex })
     }
+    // else: a label/separator page with no order content — skip (but do NOT reset
+    // currentHandle/currentSlip, so a real continuation after it still attaches).
   })
 
   return [...blocks.values()]
@@ -456,9 +466,17 @@ function parsePackingSlip(block, matchTeam) {
         if (!team) team = c // otherwise keep the first plausible raw
       }
 
-      isGiveaway = RX.GIVEAWAY_FLAG.test(windowText) || RX.ZERO_PRICE.test(windowText)
-      const pm = windowText.match(/\$([0-9]+(?:\.[0-9]{2})?)/)
+      // Price = this item's own subtotal (the first $ on/after the order line).
+      const pm = windowText.match(/\$([0-9][0-9,]*(?:\.[0-9]{2})?)/)
       if (pm) price = toPrice(pm[1])
+      // A card is a giveaway IFF its subtotal is $0. The literal "GIVEAWAY" token
+      // is NOT reliable on its own: it also appears inside all-caps break/product
+      // TITLES (a giveaway-themed release), which would wrongly flag every PAID
+      // card in that break as a $0 giveaway. Requiring the $0 subtotal — and only
+      // trusting a standalone GIVEAWAY token when the price is also $0 — makes the
+      // signal definitive. (A missing/unparseable price defaults to 0 -> giveaway,
+      // which is the safe read for a $0 line.)
+      isGiveaway = price === 0
       if (isGiveaway) price = 0
 
       orders.push({ breakNumber, team, orderId, price, isGiveaway })
@@ -596,36 +614,49 @@ function parsePages(pages, { onProgress, sport } = {}) {
     // value, decided by a vote over the teams/orders the two slips share. On a
     // clean PDF the two agree, so nothing changes.
     if (breaking.breaks.length && packing.orders.length) {
-      const packTeamBreak = new Map() // canonical team -> break number
-      const packOrderBreak = new Map() // order id -> break number
+      // Map each packing ORDER ID -> its (clean) break number. Order ids are the
+      // ONLY reliable join key here: each id belongs to exactly one break, so it
+      // can never fuse two distinct breaks the way a shared TEAM name can (a
+      // customer can own the same team in two different breaks). Team-name voting
+      // was removed for exactly that reason — it merged distinct breaks even on
+      // clean PDFs.
+      const packOrderBreak = new Map()
       for (const o of packing.orders) {
-        if (o.breakNumber == null) continue
-        if (o.orderId) packOrderBreak.set(String(o.orderId), o.breakNumber)
-        if (o.team) {
-          const k = matchTeam(o.team).team || o.team
-          if (k) packTeamBreak.set(k, o.breakNumber)
-        }
+        if (o.breakNumber == null || !o.orderId) continue
+        packOrderBreak.set(String(o.orderId), o.breakNumber)
       }
+      let changed = false
       for (const b of breaking.breaks) {
         const votes = new Map()
-        const vote = (bn) => { if (bn != null) votes.set(bn, (votes.get(bn) || 0) + 1) }
-        for (const oid of b.orderIds) vote(packOrderBreak.get(String(oid)))
-        for (const raw of b.teams) vote(packTeamBreak.get(matchTeam(raw).team || raw))
-        let bestBn = null
-        let bestV = 0
-        for (const [bn, v] of votes) { if (v > bestV) { bestV = v; bestBn = bn } }
-        if (bestBn != null && bestBn !== b.breakNumber) b.breakNumber = bestBn
+        for (const oid of b.orderIds) {
+          const bn = packOrderBreak.get(String(oid))
+          if (bn != null) votes.set(bn, (votes.get(bn) || 0) + 1)
+        }
+        if (!votes.size) continue // no packing evidence -> trust the breaking slip
+        // Override ONLY on an unambiguous winner: one packing break backed by a
+        // strict majority of this break's order ids that beats every other
+        // candidate. This corrects a corrupted break number without ever merging
+        // two genuinely-distinct breaks.
+        const sorted = [...votes.entries()].sort((x, y) => y[1] - x[1])
+        const [topBn, topV] = sorted[0]
+        const secondV = sorted[1] ? sorted[1][1] : 0
+        if (topBn !== b.breakNumber && topV > secondV && topV * 2 > b.orderIds.size) {
+          b.breakNumber = topBn
+          changed = true
+        }
       }
-      // Reconciliation may collapse two breaks onto the same number — merge them
-      // so a break number is never emitted twice for one customer.
-      const mergedBreaks = new Map()
-      for (const b of breaking.breaks) {
-        if (!mergedBreaks.has(b.breakNumber)) mergedBreaks.set(b.breakNumber, { breakNumber: b.breakNumber, orderIds: new Set(), teams: [] })
-        const m = mergedBreaks.get(b.breakNumber)
-        for (const o of b.orderIds) m.orderIds.add(o)
-        for (const t of b.teams) m.teams.push(t)
+      if (changed) {
+        // A correction can collapse two breaks onto one number — merge them so a
+        // break number is never emitted twice for one customer.
+        const mergedBreaks = new Map()
+        for (const b of breaking.breaks) {
+          if (!mergedBreaks.has(b.breakNumber)) mergedBreaks.set(b.breakNumber, { breakNumber: b.breakNumber, orderIds: new Set(), teams: [] })
+          const m = mergedBreaks.get(b.breakNumber)
+          for (const o of b.orderIds) m.orderIds.add(o)
+          for (const t of b.teams) m.teams.push(t)
+        }
+        breaking.breaks = [...mergedBreaks.values()]
       }
-      breaking.breaks = [...mergedBreaks.values()]
     }
 
     extractEvent(block, event)
@@ -801,6 +832,21 @@ function parsePages(pages, { onProgress, sport } = {}) {
     let giveawaySeq = 0
     for (const o of packing.orders) {
       if (!o.isGiveaway || consumedPacks.has(o)) continue
+      // Dedup: if this giveaway's team is ALREADY a slot for this customer (it was
+      // listed on the breaking slip but its packing line was break-less, so it
+      // never paired and looked unconsumed), mark THAT slot as the giveaway
+      // instead of emitting a duplicate card.
+      if (o.team) {
+        const gteam = matchTeam(o.team).team || o.team
+        const existing = teamSlots.find((ts) => ts.customerId === handle && (matchTeam(ts.teamName).team || ts.teamName) === gteam)
+        if (existing) {
+          existing.isGiveaway = true
+          existing.price = 0
+          const eo = orders.find((ord) => ord.id === 'order_' + existing.id.slice('slot_'.length))
+          if (eo) { eo.isGiveaway = true; eo.price = 0 }
+          continue
+        }
+      }
       const n = o.breakNumber != null ? o.breakNumber : null
       const breakId = n != null ? 'break_' + n : `giveaway_${handle}`
       if (n != null) breakNumbers.add(n)

@@ -152,3 +152,17 @@ describe('sport helpers', () => {
     expect(normalizeSport(undefined)).toBe('nfl')
   })
 })
+
+describe('matchTeam — hardening', () => {
+  it('snaps a city-prefixed name to a canonical (Oakland Athletics -> Athletics)', () => {
+    expect(createTeamMatcher('mlb').matchTeam('Oakland Athletics').team).toBe('Athletics')
+    expect(createTeamMatcher('mlb').matchTeam('Sacramento Athletics').team).toBe('Athletics')
+  })
+  it('does NOT fuzzy-snap a name that is an exact team in ANOTHER league', () => {
+    // "New York Mets" (MLB) is edit-distance 1 from "New York Jets" (NFL): an NFL
+    // matcher must NOT put a Mets card into a Jets slot.
+    expect(createTeamMatcher('nfl').matchTeam('New York Mets').team).toBeNull()
+    // And the MLB matcher still resolves it exactly.
+    expect(createTeamMatcher('mlb').matchTeam('New York Mets').team).toBe('New York Mets')
+  })
+})

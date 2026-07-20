@@ -6,6 +6,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.27] - 2026-07-20
+
+### Fixed — Bulletproofing the PDF order parse
+An adversarial audit of the parser (plus a 13-case robustness test suite) closed
+several ways a messy Whatnot export could produce a wrong order:
+- **Giveaway detection is now price-based.** A break or product **title** that
+  contains the word "GIVEAWAY" no longer flags every **paid** card in that break
+  as a $0 giveaway — a card is a giveaway only when its own subtotal is **$0**.
+- **A giveaway listed on the breaking slip is never double-counted** when its
+  packing line has no break number — it now shows once, correctly marked.
+- **Break-number reconciliation is safer.** It corrects a corrupted break number
+  only from the packing slip's **order IDs** (never shared team names), so two
+  distinct breaks that happen to share a team are **no longer merged**.
+- **Big prices parse correctly** — a card priced **$1,250.00** is read as
+  $1,250, not $1 (thousands separators are handled).
+- **A shipping-label page can't hijack another order's tracking** — a bare label
+  page printed before its packing slip is no longer attached to the previous
+  customer.
+- **Cross-league team names don't mis-snap** — e.g. a "New York Mets" card is
+  never fuzzy-matched to "New York Jets" (it stays a warning instead of landing
+  in the wrong team).
+
+Badly-corrupted pages that truly can't be recovered are still flagged for a
+quick manual check rather than silently guessed.
+
 ## [1.5.26] - 2026-07-20
 
 ### Changed — Slimmer sidebar with a Settings menu
